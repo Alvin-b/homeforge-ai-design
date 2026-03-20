@@ -1,9 +1,9 @@
-import React, { useMemo, useState, useEffect, Component, type ReactNode } from 'react'
+import React, { useState, useEffect, Component, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Environment, Grid, PerspectiveCamera } from '@react-three/drei'
+import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useEditorStore } from '@/store/useEditorStore'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Compass } from 'lucide-react'
 
 class WebGLErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
@@ -17,12 +17,16 @@ class WebGLErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
 function WebGLFallback() {
   return (
     <div className="w-full h-full flex items-center justify-center bg-muted">
-      <div className="text-center max-w-sm">
+      <div className="text-center max-w-sm px-6">
         <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
         <p className="text-sm font-display font-semibold text-foreground">3D View Unavailable</p>
         <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          Your browser or device doesn't support WebGL. Try using a modern browser with hardware acceleration enabled.
+          WebGL isn't available in this sandboxed preview. Click <strong>"Open in new tab"</strong> (top-right of the preview) to test the full 3D view in your browser.
         </p>
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-accent">
+          <ExternalLink className="w-3.5 h-3.5" />
+          <span className="font-medium">Open in new tab to use 3D</span>
+        </div>
       </div>
     </div>
   )
@@ -41,9 +45,9 @@ function Wall3D({ wall }: { wall: any }) {
   const thickness = wall.thickness / SCALE
 
   return (
-    <mesh position={[cx, height / 2, cy]} rotation={[0, -angle, 0]}>
+    <mesh position={[cx, height / 2, cy]} rotation={[0, -angle, 0]} castShadow receiveShadow>
       <boxGeometry args={[length, height, thickness]} />
-      <meshStandardMaterial color="#e5e7eb" />
+      <meshStandardMaterial color="#d4d4d8" roughness={0.8} />
     </mesh>
   )
 }
@@ -53,12 +57,12 @@ function FurnitureItem3D({ item }: { item: any }) {
   const z = item.y / SCALE
   const w = item.width
   const h = item.height * 0.6
-  const d = (item.height || 0.5)
+  const d = item.height || 0.5
 
   return (
-    <mesh position={[x, h / 2, z]} rotation={[0, -(item.rotation * Math.PI) / 180, 0]}>
+    <mesh position={[x, h / 2, z]} rotation={[0, -(item.rotation * Math.PI) / 180, 0]} castShadow>
       <boxGeometry args={[w, h, d]} />
-      <meshStandardMaterial color="#a3bffa" />
+      <meshStandardMaterial color="#93a3c0" roughness={0.6} />
     </mesh>
   )
 }
@@ -67,8 +71,19 @@ function Ground() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
       <planeGeometry args={[100, 100]} />
-      <meshStandardMaterial color="#f5f5f0" />
+      <meshStandardMaterial color="#f0f0ec" />
     </mesh>
+  )
+}
+
+function CompassIndicator() {
+  return (
+    <Html position={[0, 0.1, 0]} center style={{ pointerEvents: 'none' }}>
+      <div className="flex flex-col items-center opacity-40">
+        <span className="text-[10px] font-bold text-red-500">N</span>
+        <div className="w-px h-3 bg-red-400" />
+      </div>
+    </Html>
   )
 }
 
@@ -81,22 +96,32 @@ function Scene() {
       <OrbitControls
         enableDamping
         dampingFactor={0.05}
+        enablePan
+        enableZoom
+        enableRotate
         maxPolarAngle={Math.PI / 2.1}
         minDistance={3}
         maxDistance={50}
       />
-      
-      <ambientLight intensity={0.6} />
+
+      <ambientLight intensity={0.5} />
       <directionalLight
         position={[10, 15, 10]}
-        intensity={1}
+        intensity={1.2}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
+        shadow-camera-far={50}
+        shadow-camera-left={-20}
+        shadow-camera-right={20}
+        shadow-camera-top={20}
+        shadow-camera-bottom={-20}
       />
+      <hemisphereLight args={['#b1c4e0', '#e8dcc8', 0.4]} />
 
       <Ground />
-      
+      <CompassIndicator />
+
       <Grid
         position={[0, 0, 0]}
         args={[100, 100]}
@@ -123,28 +148,49 @@ function Scene() {
   )
 }
 
+function CanvasLoading() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-muted">
+      <div className="text-center">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+        <p className="text-xs text-muted-foreground">Loading 3D…</p>
+      </div>
+    </div>
+  )
+}
+
 export default function Canvas3DView() {
   const [webglSupported, setWebglSupported] = useState<boolean | null>(null)
 
   useEffect(() => {
     try {
       const canvas = document.createElement('canvas')
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
       setWebglSupported(!!gl)
     } catch {
       setWebglSupported(false)
     }
   }, [])
 
-  if (webglSupported === null) return null
+  if (webglSupported === null) return <CanvasLoading />
   if (!webglSupported) return <WebGLFallback />
 
   return (
     <WebGLErrorBoundary>
-      <div className="w-full h-full bg-muted">
-        <Canvas shadows>
+      <div className="w-full h-full bg-muted relative">
+        <Canvas
+          shadows
+          fallback={<CanvasLoading />}
+          onCreated={({ gl }) => {
+            gl.setClearColor(new THREE.Color('#f8f9ff'), 1)
+          }}
+        >
           <Scene />
         </Canvas>
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">
+          <Compass className="w-3 h-3" />
+          <span>Orbit: drag · Zoom: scroll · Pan: right-drag</span>
+        </div>
       </div>
     </WebGLErrorBoundary>
   )
