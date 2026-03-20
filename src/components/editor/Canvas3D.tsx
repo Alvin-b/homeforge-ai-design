@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, type ReactNode } from 'react'
+import React, { Component, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
