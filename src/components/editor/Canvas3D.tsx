@@ -1,8 +1,32 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect, Component, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { useEditorStore } from '@/store/useEditorStore'
+import { AlertTriangle } from 'lucide-react'
+
+class WebGLErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  render() {
+    if (this.state.hasError) return <WebGLFallback />
+    return this.props.children
+  }
+}
+
+function WebGLFallback() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-muted">
+      <div className="text-center max-w-sm">
+        <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+        <p className="text-sm font-display font-semibold text-foreground">3D View Unavailable</p>
+        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+          Your browser or device doesn't support WebGL. Try using a modern browser with hardware acceleration enabled.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 const SCALE = 50
 
@@ -17,10 +41,7 @@ function Wall3D({ wall }: { wall: any }) {
   const thickness = wall.thickness / SCALE
 
   return (
-    <mesh
-      position={[cx, height / 2, cy]}
-      rotation={[0, -angle, 0]}
-    >
+    <mesh position={[cx, height / 2, cy]} rotation={[0, -angle, 0]}>
       <boxGeometry args={[length, height, thickness]} />
       <meshStandardMaterial color="#e5e7eb" />
     </mesh>
@@ -51,55 +72,80 @@ function Ground() {
   )
 }
 
-export default function Canvas3D() {
+function Scene() {
   const { walls, placedItems } = useEditorStore()
 
   return (
-    <div className="w-full h-full bg-gradient-to-b from-sky-100 to-sky-50">
-      <Canvas shadows>
-        <PerspectiveCamera makeDefault position={[10, 8, 10]} fov={50} />
-        <OrbitControls
-          enableDamping
-          dampingFactor={0.05}
-          maxPolarAngle={Math.PI / 2.1}
-          minDistance={3}
-          maxDistance={50}
-        />
-        
-        <ambientLight intensity={0.6} />
-        <directionalLight
-          position={[10, 15, 10]}
-          intensity={1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-        />
+    <>
+      <PerspectiveCamera makeDefault position={[10, 8, 10]} fov={50} />
+      <OrbitControls
+        enableDamping
+        dampingFactor={0.05}
+        maxPolarAngle={Math.PI / 2.1}
+        minDistance={3}
+        maxDistance={50}
+      />
+      
+      <ambientLight intensity={0.6} />
+      <directionalLight
+        position={[10, 15, 10]}
+        intensity={1}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+      />
 
-        <Ground />
-        
-        <Grid
-          position={[0, 0, 0]}
-          args={[100, 100]}
-          cellSize={1}
-          cellThickness={0.5}
-          cellColor="#d4d4d8"
-          sectionSize={5}
-          sectionThickness={1}
-          sectionColor="#a1a1aa"
-          fadeDistance={50}
-          infiniteGrid
-        />
+      <Ground />
+      
+      <Grid
+        position={[0, 0, 0]}
+        args={[100, 100]}
+        cellSize={1}
+        cellThickness={0.5}
+        cellColor="#d4d4d8"
+        sectionSize={5}
+        sectionThickness={1}
+        sectionColor="#a1a1aa"
+        fadeDistance={50}
+        infiniteGrid
+      />
 
-        {walls.map((wall) => (
-          <Wall3D key={wall.id} wall={wall} />
-        ))}
+      {walls.map((wall) => (
+        <Wall3D key={wall.id} wall={wall} />
+      ))}
 
-        {placedItems.map((item) => (
-          <FurnitureItem3D key={item.id} item={item} />
-        ))}
+      {placedItems.map((item) => (
+        <FurnitureItem3D key={item.id} item={item} />
+      ))}
 
-        <Environment preset="apartment" />
-      </Canvas>
-    </div>
+      <Environment preset="apartment" />
+    </>
+  )
+}
+
+export default function Canvas3DView() {
+  const [webglSupported, setWebglSupported] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    try {
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      setWebglSupported(!!gl)
+    } catch {
+      setWebglSupported(false)
+    }
+  }, [])
+
+  if (webglSupported === null) return null
+  if (!webglSupported) return <WebGLFallback />
+
+  return (
+    <WebGLErrorBoundary>
+      <div className="w-full h-full bg-muted">
+        <Canvas shadows>
+          <Scene />
+        </Canvas>
+      </div>
+    </WebGLErrorBoundary>
   )
 }
