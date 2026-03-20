@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, type ReactNode } from 'react'
+import React, { Component, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -160,27 +160,13 @@ function CanvasLoading() {
 }
 
 export default function Canvas3DView() {
-  const [webglSupported, setWebglSupported] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    try {
-      const canvas = document.createElement('canvas')
-      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
-      setWebglSupported(!!gl)
-    } catch {
-      setWebglSupported(false)
-    }
-  }, [])
-
-  if (webglSupported === null) return <CanvasLoading />
-  if (!webglSupported) return <WebGLFallback />
-
   return (
     <WebGLErrorBoundary>
       <div className="w-full h-full bg-muted relative">
         <Canvas
           shadows
           fallback={<CanvasLoading />}
+          gl={{ failIfMajorPerformanceCaveat: false, antialias: true, alpha: false }}
           onCreated={({ gl }) => {
             gl.setClearColor(new THREE.Color('#f8f9ff'), 1)
           }}
