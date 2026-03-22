@@ -3,7 +3,7 @@ import { useEditorStore } from '@/store/useEditorStore'
 import { Trash2, RotateCw } from 'lucide-react'
 
 export default function PropertiesPanel() {
-  const { selectedId, walls, placedItems, updateWall, updateItem, deleteSelected } = useEditorStore()
+  const { selectedId, walls, rooms, stairs, placedItems, updateWall, updateRoom, updateItem, updateStair, deleteSelected } = useEditorStore()
 
   if (!selectedId) {
     return (
@@ -16,7 +16,87 @@ export default function PropertiesPanel() {
   }
 
   const wall = walls.find(w => w.id === selectedId)
+  const room = rooms.find(r => r.id === selectedId)
+  const stair = stairs.find(s => s.id === selectedId)
   const item = placedItems.find(i => i.id === selectedId)
+
+  if (room) {
+    return (
+      <div className="w-64 h-full bg-card border-l border-border flex flex-col">
+        <div className="p-3 border-b border-border flex items-center justify-between">
+          <h3 className="text-sm font-display font-semibold text-foreground">Room</h3>
+          <button onClick={deleteSelected} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive transition-colors active:scale-[0.95]">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-3 space-y-3">
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Name</label>
+            <input
+              value={room.name}
+              onChange={(e) => updateRoom(room.id, { name: e.target.value })}
+              className="w-full mt-1 bg-muted border border-border rounded-md px-2 py-1 text-sm text-foreground"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Floor Color</label>
+            <input
+              type="color"
+              value={room.floorColor}
+              onChange={(e) => updateRoom(room.id, { floorColor: e.target.value })}
+              className="w-full mt-1 h-8 rounded-md cursor-pointer"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Wall Color</label>
+            <input
+              type="color"
+              value={room.wallColor}
+              onChange={(e) => updateRoom(room.id, { wallColor: e.target.value })}
+              className="w-full mt-1 h-8 rounded-md cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (stair) {
+    return (
+      <div className="w-64 h-full bg-card border-l border-border flex flex-col">
+        <div className="p-3 border-b border-border flex items-center justify-between">
+          <h3 className="text-sm font-display font-semibold text-foreground">Stairs</h3>
+          <button onClick={deleteSelected} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive transition-colors active:scale-[0.95]">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-3 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Width (m)</label>
+              <input
+                type="number"
+                step={0.1}
+                value={stair.width}
+                onChange={(e) => updateStair(stair.id, { width: parseFloat(e.target.value) || 1.2 })}
+                className="w-full mt-1 bg-muted border border-border rounded-md px-2 py-1 text-sm text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Depth (m)</label>
+              <input
+                type="number"
+                step={0.1}
+                value={stair.depth}
+                onChange={(e) => updateStair(stair.id, { depth: parseFloat(e.target.value) || 2.5 })}
+                className="w-full mt-1 bg-muted border border-border rounded-md px-2 py-1 text-sm text-foreground"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (wall) {
     const length = Math.sqrt(

@@ -3,6 +3,7 @@ export interface FurnitureItem {
   name: string
   category: string
   emoji: string
+  gltfPath?: string // /models/{id}.glb
   width: number   // meters
   height: number  // meters (3D height)
   depth: number   // meters (3D depth)
