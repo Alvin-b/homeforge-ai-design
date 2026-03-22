@@ -1,9 +1,10 @@
-import React, { Component, type ReactNode } from 'react'
+import React, { Component, Suspense, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useEditorStore } from '@/store/useEditorStore'
 import { AlertTriangle, ExternalLink, Compass } from 'lucide-react'
+import FurnitureItem3D from '@/components/editor/FurnitureModel3D'
 
 class WebGLErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
@@ -52,26 +53,7 @@ function Wall3D({ wall }: { wall: any }) {
   )
 }
 
-function FurnitureItem3D({ item }: { item: any }) {
-  const x = item.x / SCALE
-  const z = item.y / SCALE
-  const w = item.width
-  const d = item.depth ?? item.height ?? 0.5
-  const h = (item.height ?? 0.8)
-  const rot = -(item.rotation * Math.PI) / 180
-  const cat = (item.furnitureId || '').split('-')[0]
-
-  const color = item.color || (cat === 'sofa' ? '#8b7355' : cat === 'bed' ? '#c9a86c' : cat === 'table' ? '#5c4033' : cat === 'chair' ? '#6b5344' : '#93a3c0')
-
-  return (
-    <group position={[x, h / 2, z]} rotation={[0, rot, 0]}>
-      <mesh castShadow>
-        <boxGeometry args={[w * 0.98, h * 0.98, d * 0.98]} />
-        <meshStandardMaterial color={color} roughness={0.6} />
-      </mesh>
-    </group>
-  )
-}
+// Removed old FurnitureItem3D — now imported from FurnitureModel3D
 
 function Ground() {
   return (
