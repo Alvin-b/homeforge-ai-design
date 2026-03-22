@@ -13,7 +13,7 @@ import FurnitureLibrary from '@/components/editor/FurnitureLibrary'
 import PropertiesPanel from '@/components/editor/PropertiesPanel'
 import SmartWizard from '@/components/editor/SmartWizard'
 import AIDesignGenerator from '@/components/editor/AIDesignGenerator'
-import { useEditorStore, type Tool } from '@/store/useEditorStore'
+import { useEditorStore, type Tool, type EditorSnapshot } from '@/store/useEditorStore'
 import { Link, useParams } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 
