@@ -26,6 +26,10 @@ export default function Canvas2D() {
   } = useEditorStore()
 
   useEffect(() => {
+    if (activeTool !== 'room') setRoomStart(null)
+  }, [activeTool])
+
+  useEffect(() => {
     const resize = () => {
       if (containerRef.current) {
         setStageSize({
