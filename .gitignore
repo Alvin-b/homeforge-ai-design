@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+vite
+vite_react_shadcn_ts@0.0.0

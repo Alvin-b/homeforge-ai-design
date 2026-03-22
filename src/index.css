@@ -135,3 +135,150 @@ html {
 .editor-scrollbar::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5);
 }
+
+/* ── P5D UI Components ─────────────────────────────────────────── */
+.p5d-header {
+  height: 48px;
+  background: #fff;
+  border-bottom: 1px solid #e4e4e4;
+  display: flex;
+  align-items: center;
+  position: relative;
+  z-index: 100;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  flex-shrink: 0;
+}
+
+.p5d-switch {
+  display: flex;
+  background: #f0f0ee;
+  border: 1px solid #e0e0de;
+  border-radius: 5px;
+  padding: 2px;
+  gap: 1px;
+}
+
+.p5d-switch-item {
+  padding: 4px 18px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.p5d-switch-item:hover { color: #555; background: rgba(0,0,0,0.04); }
+
+.p5d-switch-item.is-active {
+  background: #fff;
+  color: #333;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.p5d-switch-item.is-3d.is-active { color: #1eaedb; }
+
+.p5d-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.12s;
+  position: relative;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.p5d-icon-btn:hover  { background: #f0f0ee; color: #555; }
+.p5d-icon-btn.active { background: #e8f6fc; color: #1eaedb; }
+.p5d-icon-btn.danger:hover { background: #fef0f0; color: #e53e3e; }
+
+.p5d-tool-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.12s;
+  margin: 1px auto;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.p5d-tool-btn:hover  { background: #f0f0ee; color: #555; }
+.p5d-tool-btn.active { background: #e8f6fc; color: #1eaedb; }
+
+.p5d-tooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #4c4c4c;
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.p5d-tooltip::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #4c4c4c;
+}
+
+.group:hover .p5d-tooltip { opacity: 1; }
+
+.panel-slide-in {
+  animation: panelSlide 0.18s ease-out;
+}
+
+@keyframes panelSlide {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.shadow-float {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.p5d-header { height:48px; background:#fff; border-bottom:1px solid #e4e4e4; display:flex; align-items:center; position:relative; z-index:100; box-shadow:0 1px 3px rgba(0,0,0,0.06); flex-shrink:0; }
+.p5d-switch { display:flex; background:#f0f0ee; border:1px solid #e0e0de; border-radius:5px; padding:2px; gap:1px; }
+.p5d-switch-item { padding:4px 18px; border-radius:4px; font-size:12px; font-weight:600; color:#888; cursor:pointer; transition:all 0.15s; user-select:none; display:flex; align-items:center; gap:4px; }
+.p5d-switch-item:hover { color:#555; background:rgba(0,0,0,0.04); }
+.p5d-switch-item.is-active { background:#fff; color:#333; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+.p5d-switch-item.is-3d.is-active { color:#1eaedb; }
+.p5d-icon-btn { width:32px; height:32px; border-radius:5px; display:flex; align-items:center; justify-content:center; color:#888; cursor:pointer; transition:all 0.12s; background:transparent; border:none; outline:none; }
+.p5d-icon-btn:hover { background:#f0f0ee; color:#555; }
+.p5d-icon-btn.active { background:#e8f6fc; color:#1eaedb; }
+.p5d-tool-btn { width:38px; height:38px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#888; cursor:pointer; transition:all 0.12s; background:transparent; border:none; outline:none; }
+.p5d-tool-btn:hover { background:#f0f0ee; color:#555; }
+.p5d-tool-btn.active { background:#e8f6fc; color:#1eaedb; }
+.p5d-tooltip { position:absolute; left:calc(100% + 8px); top:50%; transform:translateY(-50%); background:#4c4c4c; color:#fff; font-size:11px; padding:4px 8px; border-radius:4px; white-space:nowrap; pointer-events:none; z-index:999; opacity:0; transition:opacity 0.1s; }
+.p5d-tooltip::before { content:''; position:absolute; right:100%; top:50%; transform:translateY(-50%); border:5px solid transparent; border-right-color:#4c4c4c; }
+.group:hover .p5d-tooltip { opacity:1; }
+.panel-slide-in { animation:panelSlide 0.18s ease-out; }
+@keyframes panelSlide { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
+.shadow-float { box-shadow:0 4px 12px rgba(0,0,0,0.12); }

@@ -6,19 +6,16 @@ Based on research of [Planner 5D](https://planner5d.com/), here's the feature ma
 
 | Planner 5D Feature | HomeForge Status |
 |--------------------|------------------|
-| 2D Floor Plan | ✅ Draw walls, rooms, doors, windows, stairs |
+| 2D Floor Plan | ✅ Draw walls, rooms, doors, windows |
 | 3D View | ✅ Orbit, zoom, pan |
 | 360° Walkthrough | ✅ First-person mode (WASD + mouse look) |
 | 4K Renders | ✅ Export current view as PNG |
 | Furniture Library (8K+) | ✅ 38 items, 10 categories |
 | Room Tool | ✅ Draw room by two corners |
 | Door/Window on walls | ✅ Click wall to add |
-| Stairs | ✅ Click to place, drag to move |
-| Measurement Tool | ✅ Click two points for distance |
 | Project Save/Load | ✅ localStorage, Share link |
-| My Projects | ✅ Dashboard with project list |
-| Templates | ✅ Blank, Living Room, Bedroom, Kitchen |
-| Floor/Wall materials | ✅ Room properties: floor color, wall color |
+| Templates | 🔶 Smart Wizard generates rooms |
+| Floor/Ceiling/Wall materials | ⏳ Partial (room floor color) |
 
 ## AI Features
 
@@ -33,8 +30,8 @@ Based on research of [Planner 5D](https://planner5d.com/), here's the feature ma
 
 | Planner 5D Feature | HomeForge Status |
 |--------------------|------------------|
-| Mood boards | ✅ Collect inspiration images (localStorage) |
-| Shopping list / Budget widget | ✅ Cost estimates from furniture |
+| Mood boards | ⏳ Not implemented |
+| Shopping list / Budget widget | ⏳ Not implemented |
 | Import 3D models | ⏳ Not implemented |
 | Export to CAD | ⏳ Not implemented |
 | AR/VR | ⏳ Not implemented |

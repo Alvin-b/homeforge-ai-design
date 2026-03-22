@@ -1,7 +1,4 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import type { StateCreator } from 'zustand'
-
 
 export type Tool = 
   | 'select' | 'wall' | 'room' | 'door' | 'window' 
@@ -72,21 +69,6 @@ export interface Stair {
 interface EditorState {
   activeTool: Tool
   walls: Wall[]
-  history: EditorSnapshot[]
-  historyIndex: number
-  currentFloor: number
-  floors: FloorSnapshot[]
-  measurements: Measurement[]
-  theme: Theme
-
-  undo: () => void
-  redo: () => void
-  addFloor: () => void
-  setCurrentFloor: (floor: number) => void
-  addMeasurement: (meas: Measurement) => void
-  deleteMeasurement: (id: string) => void
-  setTheme: (theme: Partial<Theme>) => void
-
   rooms: Room[]
   doors: Door[]
   windows: Window[]
@@ -112,7 +94,6 @@ interface EditorState {
   addWindow: (win: Window) => void
   deleteWindow: (id: string) => void
   addStair: (stair: Stair) => void
-  updateStair: (id: string, updates: Partial<Stair>) => void
   deleteStair: (id: string) => void
   placeItem: (item: PlacedItem) => void
   updateItem: (id: string, updates: Partial<PlacedItem>) => void
@@ -129,103 +110,20 @@ interface EditorState {
   exportSnapshot: () => EditorSnapshot
 }
 
-interface FloorSnapshot {
+export interface EditorSnapshot {
   walls: Wall[]
   rooms: Room[]
   doors: Door[]
   windows: Window[]
   stairs: Stair[]
   placedItems: PlacedItem[]
-}
-
-interface Measurement {
-  id: string
-  startX: number
-  startY: number
-  endX: number
-  endY: number
-  label?: string
-}
-
-interface Theme {
-  wallColor: string
-  floorColor: string
-  furnitureStyle: 'modern' | 'classic' | 'boho'
-}
-
-export interface EditorSnapshot {
-  floors: FloorSnapshot[]
-  measurements: Measurement[]
-  theme: Theme
   projectName: string
 }
 
-export const useEditorStore = create(
-  persist(
-    (set, get) => ({
-      activeTool: 'select',
-      walls: [],
-      rooms: [],
-      history: [] as EditorSnapshot[],
-      historyIndex: -1,
-      currentFloor: 0,
-      floors: [{ walls: [], rooms: [], doors: [], windows: [], stairs: [], placedItems: [] }],
-      measurements: [] as { id: string; startX: number; startY: number; endX: number; endY: number; label?: string }[],
-  theme: {
-        wallColor: '#e5e7eb',
-        floorColor: '#f3f4f6',
-        furnitureStyle: 'modern',
-      },
-
-  undo: () => {
-    const { history, historyIndex } = get()
-    if (historyIndex > 0) {
-      const prev = history[historyIndex - 1]
-      set({ 
-        historyIndex: historyIndex - 1,
-        floors: prev.floors || get().floors,
-        measurements: prev.measurements || [],
-        theme: prev.theme || get().theme,
-      })
-    }
-  },
-
-  redo: () => {
-    const { history, historyIndex, floors, measurements, theme } = get()
-    if (historyIndex < history.length - 1) {
-      const next = history[historyIndex + 1]
-      set({ 
-        historyIndex: historyIndex + 1,
-        floors: next.floors || floors,
-        measurements: next.measurements || measurements,
-        theme: next.theme || theme,
-      })
-    }
-  },
-
-  addFloor: () => set((s) => ({
-    floors: [...s.floors, { walls: [], rooms: [], doors: [], windows: [], stairs: [], placedItems: [] }],
-  })),
-
-  setCurrentFloor: (floor) => {
-    if (floor < 0 || floor >= get().floors.length) return
-    set({ currentFloor: floor })
-  },
-
-  addMeasurement: (meas) => set((s) => ({
-    measurements: [...s.measurements, meas]
-  })),
-
-  deleteMeasurement: (id) => set((s) => ({
-    measurements: s.measurements.filter(m => m.id !== id)
-  })),
-
-  setTheme: (updates) => set((s) => ({
-    theme: { ...s.theme, ...updates }
-  })),
-
-  doors: [],
-
+export const useEditorStore = create<EditorState>((set, get) => ({
+  activeTool: 'select',
+  walls: [],
+  rooms: [],
   doors: [],
   windows: [],
   stairs: [],
@@ -269,9 +167,6 @@ export const useEditorStore = create(
     selectedId: s.selectedId === id ? null : s.selectedId,
   })),
   addStair: (stair) => set((s) => ({ stairs: [...s.stairs, stair] })),
-  updateStair: (id, updates) => set((s) => ({
-    stairs: s.stairs.map(st => st.id === id ? { ...st, ...updates } : st)
-  })),
   deleteStair: (id) => set((s) => ({
     stairs: s.stairs.filter(st => st.id !== id),
     selectedId: s.selectedId === id ? null : s.selectedId,
@@ -309,15 +204,8 @@ export const useEditorStore = create(
   setProjectName: (name) => set({ projectName: name }),
   setSnapToGrid: (snap) => set({ snapToGrid: snap }),
 
-  // Update hydrate to handle new fields
-  hydrate: (data: Partial<EditorState>) => set((s) => ({
-    floors: data.floors || s.floors,
-    measurements: data.measurements || s.measurements,
-    theme: data.theme || s.theme,
-    // Backwards compat
-    walls: data.walls ? [{ walls: data.walls, rooms: data.rooms || [], doors: data.doors || [], windows: data.windows || [], stairs: data.stairs || [], placedItems: data.placedItems || [] }] : s.floors,
-  })),
-
+  hydrate: (data) => set({
+    walls: data.walls ?? [],
     rooms: data.rooms ?? [],
     doors: data.doors ?? [],
     windows: data.windows ?? [],
