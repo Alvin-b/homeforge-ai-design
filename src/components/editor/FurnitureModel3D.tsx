@@ -1,664 +1,524 @@
-import React from 'react'
+import React, { Suspense, useRef, Component, type ReactNode } from 'react'
+import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import type { PlacedItem } from '@/store/useEditorStore'
 
 const SCALE = 50
 
-// ─── Realistic Materials ────────────────────────────────────────────
-const materials = {
-  darkWood: { color: '#3d2b1f', roughness: 0.45, metalness: 0.05 },
-  medWood: { color: '#6b4226', roughness: 0.5, metalness: 0.05 },
-  lightWood: { color: '#c19a6b', roughness: 0.55, metalness: 0.03 },
-  oak: { color: '#b08d57', roughness: 0.5, metalness: 0.04 },
-  walnut: { color: '#5c3317', roughness: 0.4, metalness: 0.05 },
-  fabric: { color: '#8b8589', roughness: 0.92, metalness: 0 },
-  fabricDark: { color: '#4a4a4a', roughness: 0.9, metalness: 0 },
-  fabricBeige: { color: '#c2b280', roughness: 0.9, metalness: 0 },
-  leather: { color: '#654321', roughness: 0.6, metalness: 0.05 },
-  leatherDark: { color: '#2c1b0e', roughness: 0.55, metalness: 0.08 },
-  mattress: { color: '#f5f0e8', roughness: 0.95, metalness: 0 },
-  pillow: { color: '#e8e4de', roughness: 0.95, metalness: 0 },
-  chrome: { color: '#c0c0c0', roughness: 0.15, metalness: 0.9 },
-  brushedMetal: { color: '#a8a8a8', roughness: 0.3, metalness: 0.85 },
-  blackMetal: { color: '#1a1a1a', roughness: 0.25, metalness: 0.8 },
-  stainless: { color: '#d4d4d4', roughness: 0.2, metalness: 0.9 },
-  glass: { color: '#e8f4f8', roughness: 0.05, metalness: 0.1 },
-  ceramic: { color: '#faf8f5', roughness: 0.3, metalness: 0.05 },
-  marble: { color: '#f0ece3', roughness: 0.25, metalness: 0.08 },
-  concrete: { color: '#b0b0b0', roughness: 0.85, metalness: 0 },
-  greenery: { color: '#2d5a27', roughness: 0.85, metalness: 0 },
-  terracotta: { color: '#c04000', roughness: 0.75, metalness: 0 },
-  lampShade: { color: '#f5e6d3', roughness: 0.9, metalness: 0 },
-  brass: { color: '#b5a642', roughness: 0.3, metalness: 0.85 },
+// ── GLB loader ────────────────────────────────────────────────────
+function GLBModel({ url, w, h, d }: { url: string; w: number; h: number; d: number }) {
+  const { scene } = useGLTF(url)
+  const clone = scene.clone()
+  const box = new THREE.Box3().setFromObject(clone)
+  const size = new THREE.Vector3()
+  box.getSize(size)
+  const s = Math.min(w / (size.x || 1), h / (size.y || 1), d / (size.z || 1))
+  clone.scale.setScalar(s)
+  const box2 = new THREE.Box3().setFromObject(clone)
+  const center = new THREE.Vector3()
+  box2.getCenter(center)
+  clone.position.sub(center)
+  clone.position.y += (box2.max.y - box2.min.y) / 2
+  clone.traverse((c: any) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true } })
+  return <primitive object={clone} />
 }
 
-function M(mat: { color: string; roughness: number; metalness: number }, overrideColor?: string) {
-  return (
-    <meshStandardMaterial
-      color={overrideColor || mat.color}
-      roughness={mat.roughness}
-      metalness={mat.metalness}
-    />
-  )
+class GLBBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
 
-function MTransparent(mat: { color: string; roughness: number; metalness: number }, opacity: number) {
-  return (
-    <meshStandardMaterial
-      color={mat.color}
-      roughness={mat.roughness}
-      metalness={mat.metalness}
-      transparent
-      opacity={opacity}
-    />
-  )
+// ── Material helper ───────────────────────────────────────────────
+function M({ color, roughness = 0.7, metalness = 0 }: { color: string; roughness?: number; metalness?: number }) {
+  return <meshStandardMaterial color={color} roughness={roughness} metalness={metalness} />
 }
 
-// ─── Sofa ───────────────────────────────────────────────────────────
-function Sofa3D({ w, h, d, color }: { w: number; h: number; d: number; color?: string }) {
-  const seatH = h * 0.38
-  const seatY = h * 0.28
+// ── HIGH QUALITY PROCEDURAL MODELS ───────────────────────────────
+
+function Sofa({ w, h, d, color = '#c8b89a' }: { w: number; h: number; d: number; color?: string }) {
+  const legH = h * 0.12, legR = 0.025
+  const seatY = legH + h * 0.18
   const backH = h * 0.55
-  const backT = d * 0.18
-  const armW = w * 0.08
-  const armH = h * 0.5
-  const legH = h * 0.1
-  const legR = 0.025
-  const fabricCol = color || materials.fabricBeige.color
-
   return (
     <group>
-      {/* Seat cushion */}
-      <mesh position={[0, seatY, d * 0.05]} castShadow>
-        <boxGeometry args={[w * 0.88, seatH, d * 0.75]} />
-        {M(materials.fabricBeige, fabricCol)}
-      </mesh>
-      {/* Seat cushion line details — two cushions */}
-      <mesh position={[0, seatY + seatH / 2 + 0.005, d * 0.05]} castShadow>
-        <boxGeometry args={[w * 0.01, 0.01, d * 0.7]} />
-        {M(materials.fabricDark)}
-      </mesh>
-
-      {/* Backrest */}
-      <mesh position={[0, seatY + seatH / 2 + backH / 2, -d * 0.38]} castShadow>
-        <boxGeometry args={[w * 0.88, backH, backT]} />
-        {M(materials.fabricBeige, fabricCol)}
-      </mesh>
-      {/* Back cushions — two pillows */}
-      {[-w * 0.22, w * 0.22].map((px, i) => (
-        <mesh key={i} position={[px, seatY + seatH / 2 + backH * 0.4, -d * 0.26]} castShadow>
-          <boxGeometry args={[w * 0.38, backH * 0.65, backT * 0.6]} />
-          {M(materials.fabricBeige, fabricCol)}
+      {/* Legs */}
+      {[[-w*0.44,-d*0.38],[w*0.44,-d*0.38],[-w*0.44,d*0.38],[w*0.44,d*0.38]].map(([x,z],i) => (
+        <mesh key={i} position={[x, legH/2, z]} castShadow>
+          <cylinderGeometry args={[legR, legR*1.2, legH, 8]} />
+          <M color="#3d2b1f" roughness={0.4} />
         </mesh>
       ))}
-
-      {/* Left arm */}
-      <mesh position={[-w / 2 + armW / 2, seatY + armH / 2, 0]} castShadow>
-        <boxGeometry args={[armW, armH, d * 0.92]} />
-        {M(materials.fabricBeige, fabricCol)}
+      {/* Seat cushion base */}
+      <mesh position={[0, seatY, d*0.04]} castShadow receiveShadow>
+        <boxGeometry args={[w*0.96, h*0.15, d*0.78]} />
+        <M color={color} roughness={0.88} />
       </mesh>
-      {/* Right arm */}
-      <mesh position={[w / 2 - armW / 2, seatY + armH / 2, 0]} castShadow>
-        <boxGeometry args={[armW, armH, d * 0.92]} />
-        {M(materials.fabricBeige, fabricCol)}
+      {/* Seat cushion top (slightly rounded look via scale) */}
+      <mesh position={[0, seatY + h*0.09, d*0.04]} castShadow>
+        <boxGeometry args={[w*0.94, h*0.08, d*0.76]} />
+        <M color={color} roughness={0.92} />
       </mesh>
-
-      {/* Base frame */}
-      <mesh position={[0, legH + 0.02, 0]} castShadow>
-        <boxGeometry args={[w, 0.04, d]} />
-        {M(materials.darkWood)}
+      {/* Individual seat cushion dividers */}
+      <mesh position={[0, seatY + h*0.1, d*0.04]}>
+        <boxGeometry args={[0.012, h*0.08, d*0.76]} />
+        <M color={`${color}88`} roughness={0.95} />
       </mesh>
-
-      {/* Legs — tapered wood */}
-      {[
-        [-w * 0.42, 0, -d * 0.4],
-        [w * 0.42, 0, -d * 0.4],
-        [-w * 0.42, 0, d * 0.4],
-        [w * 0.42, 0, d * 0.4],
-      ].map((pos, i) => (
-        <mesh key={i} position={[pos[0], legH / 2, pos[2]]} castShadow>
-          <cylinderGeometry args={[legR, legR * 1.3, legH, 8]} />
-          {M(materials.walnut)}
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
-// ─── Chair ──────────────────────────────────────────────────────────
-function Chair3D({ w, h, d, color }: { w: number; h: number; d: number; color?: string }) {
-  const seatH = 0.04
-  const seatY = h * 0.48
-  const legH = seatY - seatH / 2
-  const legR = 0.02
-  const backH = h * 0.45
-  const col = color || materials.oak.color
-
-  return (
-    <group>
-      {/* Seat */}
-      <mesh position={[0, seatY, 0]} castShadow>
-        <boxGeometry args={[w * 0.9, seatH, d * 0.85]} />
-        {M(materials.oak, col)}
+      {/* Back cushion */}
+      <mesh position={[0, seatY + h*0.24, -d*0.34]} castShadow>
+        <boxGeometry args={[w*0.92, backH*0.72, d*0.2]} />
+        <M color={color} roughness={0.9} />
       </mesh>
-      {/* Seat cushion */}
-      <mesh position={[0, seatY + seatH / 2 + 0.015, 0]} castShadow>
-        <boxGeometry args={[w * 0.82, 0.03, d * 0.78]} />
-        {M(materials.fabric)}
-      </mesh>
-
       {/* Back frame */}
-      <mesh position={[0, seatY + backH / 2 + seatH / 2, -d * 0.4]} castShadow>
-        <boxGeometry args={[w * 0.85, backH, 0.025]} />
-        {M(materials.oak, col)}
+      <mesh position={[0, seatY + backH*0.4, -d*0.42]} castShadow>
+        <boxGeometry args={[w*0.96, backH, d*0.08]} />
+        <M color={color} roughness={0.85} />
       </mesh>
-      {/* Back slats */}
-      {[-w * 0.25, 0, w * 0.25].map((px, i) => (
-        <mesh key={i} position={[px, seatY + backH * 0.3, -d * 0.38]} castShadow>
-          <boxGeometry args={[w * 0.06, backH * 0.5, 0.015]} />
-          {M(materials.oak, col)}
-        </mesh>
-      ))}
-
-      {/* 4 legs — tapered */}
-      {[
-        [-w * 0.38, 0, -d * 0.35],
-        [w * 0.38, 0, -d * 0.35],
-        [-w * 0.38, 0, d * 0.35],
-        [w * 0.38, 0, d * 0.35],
-      ].map((pos, i) => (
-        <mesh key={i} position={[pos[0], legH / 2, pos[2]]} castShadow>
-          <cylinderGeometry args={[legR * 0.7, legR, legH, 8]} />
-          {M(materials.oak, col)}
-        </mesh>
+      {/* Armrests */}
+      {[-1, 1].map((s, i) => (
+        <group key={i} position={[s*(w/2 - w*0.045), 0, 0]}>
+          <mesh position={[0, seatY + h*0.22, 0]} castShadow>
+            <boxGeometry args={[w*0.09, h*0.3, d*0.88]} />
+            <M color={color} roughness={0.85} />
+          </mesh>
+          <mesh position={[0, seatY + h*0.38, 0]} castShadow>
+            <boxGeometry args={[w*0.1, h*0.045, d*0.88]} />
+            <M color={color} roughness={0.82} />
+          </mesh>
+        </group>
       ))}
     </group>
   )
 }
 
-// ─── Bed ────────────────────────────────────────────────────────────
-function Bed3D({ w, h, d, color }: { w: number; h: number; d: number; color?: string }) {
-  const frameH = h * 0.35
-  const mattH = h * 0.3
-  const headH = h * 1.4
-  const headT = 0.06
-  const legH = h * 0.15
-  const frameCol = color || materials.walnut.color
-
+function Bed({ w, h, d, color = '#8b6914' }: { w: number; h: number; d: number; color?: string }) {
+  const frameH = h * 0.38
+  const matH  = h * 0.16
   return (
     <group>
       {/* Bed frame */}
-      <mesh position={[0, legH + frameH / 2, 0]} castShadow>
-        <boxGeometry args={[w + 0.06, frameH, d + 0.04]} />
-        {M(materials.walnut, frameCol)}
+      <mesh position={[0, frameH/2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w + 0.08, frameH, d + 0.06]} />
+        <M color={color} roughness={0.5} metalness={0.02} />
       </mesh>
-
+      {/* Slats */}
+      {Array.from({ length: 5 }).map((_, i) => (
+        <mesh key={i} position={[0, frameH - 0.02, -d*0.38 + (d*0.76/(4))*i]} castShadow>
+          <boxGeometry args={[w - 0.06, 0.025, 0.06]} />
+          <M color="#c8a87a" roughness={0.6} />
+        </mesh>
+      ))}
       {/* Mattress */}
-      <mesh position={[0, legH + frameH + mattH / 2, 0]} castShadow>
-        <boxGeometry args={[w - 0.04, mattH, d - 0.04]} />
-        {M(materials.mattress)}
+      <mesh position={[0, frameH + matH/2, 0]} castShadow>
+        <boxGeometry args={[w - 0.04, matH, d - 0.04]} />
+        <M color="#f0ece4" roughness={0.95} />
       </mesh>
-
-      {/* Sheet/cover on bottom 2/3 of mattress */}
-      <mesh position={[0, legH + frameH + mattH + 0.01, d * 0.12]} castShadow>
-        <boxGeometry args={[w - 0.06, 0.02, d * 0.65]} />
-        {M(materials.fabric)}
+      {/* Mattress piping edge */}
+      <mesh position={[0, frameH + matH, 0]}>
+        <boxGeometry args={[w - 0.04, 0.012, d - 0.04]} />
+        <M color="#ddd8ce" roughness={0.9} />
       </mesh>
-
+      {/* Duvet / cover */}
+      <mesh position={[0, frameH + matH + 0.04, d*0.08]} castShadow>
+        <boxGeometry args={[w - 0.06, 0.06, d * 0.72]} />
+        <M color="#e8e4de" roughness={0.95} />
+      </mesh>
       {/* Pillows */}
-      {[-(w * 0.28), w * 0.28].map((px, i) => (
-        <mesh key={i} position={[px, legH + frameH + mattH + 0.04, -d * 0.35]} castShadow>
-          <boxGeometry args={[w * 0.35, 0.08, 0.3]} />
-          {M(materials.pillow)}
+      {[-(w*0.26), w*0.26].map((px, i) => (
+        <mesh key={i} position={[px, frameH + matH + 0.06, -d*0.34]} castShadow>
+          <boxGeometry args={[w*0.38, 0.1, 0.28]} />
+          <M color="#faf8f4" roughness={0.95} />
         </mesh>
       ))}
-
       {/* Headboard */}
-      <mesh position={[0, legH + headH / 2, -d / 2 - headT / 2]} castShadow>
-        <boxGeometry args={[w + 0.06, headH, headT]} />
-        {M(materials.walnut, frameCol)}
+      <mesh position={[0, frameH + h*0.72, -d/2 - 0.04]} castShadow>
+        <boxGeometry args={[w + 0.08, h*1.45, 0.07]} />
+        <M color={color} roughness={0.48} />
       </mesh>
-      {/* Headboard panel inset */}
-      <mesh position={[0, legH + headH * 0.5, -d / 2 - headT / 2 + 0.005]} castShadow>
-        <boxGeometry args={[w - 0.1, headH * 0.7, 0.02]} />
-        {M(materials.medWood, frameCol)}
+      {/* Headboard panel detail */}
+      <mesh position={[0, frameH + h*0.72, -d/2 - 0.02]}>
+        <boxGeometry args={[w*0.78, h*1.05, 0.025]} />
+        <M color={`${color}cc`} roughness={0.55} />
       </mesh>
-
-      {/* Legs */}
-      {[
-        [-w * 0.45, 0, -d * 0.45],
-        [w * 0.45, 0, -d * 0.45],
-        [-w * 0.45, 0, d * 0.45],
-        [w * 0.45, 0, d * 0.45],
-      ].map((pos, i) => (
-        <mesh key={i} position={[pos[0], legH / 2, pos[2]]} castShadow>
-          <boxGeometry args={[0.06, legH, 0.06]} />
-          {M(materials.walnut, frameCol)}
-        </mesh>
-      ))}
     </group>
   )
 }
 
-// ─── Table / Desk ───────────────────────────────────────────────────
-function Table3D({ w, h, d, color }: { w: number; h: number; d: number; color?: string }) {
-  const topH = 0.04
-  const topY = h - topH / 2
-  const legH = h - topH
-  const legW = 0.045
-  const col = color || materials.oak.color
-
+function DiningTable({ w, h, d, color = '#8b6334' }: { w: number; h: number; d: number; color?: string }) {
+  const topT = 0.04
   return (
     <group>
       {/* Tabletop */}
-      <mesh position={[0, topY, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, topH, d]} />
-        {M(materials.oak, col)}
+      <mesh position={[0, h - topT/2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, topT, d]} />
+        <M color={color} roughness={0.45} metalness={0.02} />
       </mesh>
-      {/* Tabletop edge bevel */}
-      <mesh position={[0, topY - topH / 2 - 0.005, 0]} castShadow>
-        <boxGeometry args={[w - 0.02, 0.01, d - 0.02]} />
-        {M(materials.medWood, col)}
-      </mesh>
-
-      {/* Apron — front/back */}
-      {[-d * 0.42, d * 0.42].map((pz, i) => (
-        <mesh key={`fb${i}`} position={[0, topY - topH / 2 - 0.04, pz]} castShadow>
-          <boxGeometry args={[w * 0.85, 0.06, 0.02]} />
-          {M(materials.oak, col)}
+      {/* Apron front/back */}
+      {[-d/2 + 0.03, d/2 - 0.03].map((z, i) => (
+        <mesh key={i} position={[0, h - topT - 0.06, z]} castShadow>
+          <boxGeometry args={[w - 0.12, 0.1, 0.025]} />
+          <M color={color} roughness={0.5} />
         </mesh>
       ))}
-      {/* Apron — sides */}
-      {[-w * 0.45, w * 0.45].map((px, i) => (
-        <mesh key={`lr${i}`} position={[px, topY - topH / 2 - 0.04, 0]} castShadow>
-          <boxGeometry args={[0.02, 0.06, d * 0.75]} />
-          {M(materials.oak, col)}
+      {/* Apron sides */}
+      {[-w/2 + 0.03, w/2 - 0.03].map((x, i) => (
+        <mesh key={i} position={[x, h - topT - 0.06, 0]} castShadow>
+          <boxGeometry args={[0.025, 0.1, d - 0.12]} />
+          <M color={color} roughness={0.5} />
         </mesh>
       ))}
-
-      {/* 4 legs — tapered */}
-      {[
-        [-w * 0.44, 0, -d * 0.42],
-        [w * 0.44, 0, -d * 0.42],
-        [-w * 0.44, 0, d * 0.42],
-        [w * 0.44, 0, d * 0.42],
-      ].map((pos, i) => (
-        <mesh key={i} position={[pos[0], legH / 2, pos[2]]} castShadow>
-          <boxGeometry args={[legW, legH, legW]} />
-          {M(materials.oak, col)}
+      {/* Legs - tapered */}
+      {[[-w*0.44,-d*0.4],[w*0.44,-d*0.4],[-w*0.44,d*0.4],[w*0.44,d*0.4]].map(([x,z],i) => (
+        <mesh key={i} position={[x, (h-topT-0.1)/2, z]} castShadow>
+          <cylinderGeometry args={[0.024, 0.032, h - topT - 0.1, 8]} />
+          <M color={color} roughness={0.45} />
         </mesh>
       ))}
     </group>
   )
 }
 
-// ─── Storage (Bookshelf / Wardrobe) ─────────────────────────────────
-function Storage3D({ w, h, d, color, furnitureId }: { w: number; h: number; d: number; color?: string; furnitureId: string }) {
-  const isWardrobe = furnitureId.includes('wardrobe') || furnitureId === 'storage-2'
-  const col = color || materials.walnut.color
-  const panelT = 0.025
-
-  if (isWardrobe) {
-    return (
-      <group>
-        {/* Main body */}
-        <mesh position={[0, h / 2, 0]} castShadow>
-          <boxGeometry args={[w, h, d]} />
-          {M(materials.walnut, col)}
-        </mesh>
-        {/* Door split line */}
-        <mesh position={[0, h / 2, d / 2 + 0.001]} castShadow>
-          <boxGeometry args={[0.01, h * 0.92, 0.002]} />
-          {M(materials.darkWood)}
-        </mesh>
-        {/* Handles */}
-        {[-0.04, 0.04].map((px, i) => (
-          <mesh key={i} position={[px, h * 0.5, d / 2 + 0.015]} castShadow>
-            <boxGeometry args={[0.01, 0.1, 0.015]} />
-            {M(materials.chrome)}
-          </mesh>
-        ))}
-        {/* Crown molding */}
-        <mesh position={[0, h + 0.01, 0]} castShadow>
-          <boxGeometry args={[w + 0.03, 0.025, d + 0.02]} />
-          {M(materials.walnut, col)}
-        </mesh>
-        {/* Base */}
-        <mesh position={[0, 0.03, 0]} castShadow>
-          <boxGeometry args={[w - 0.02, 0.06, d - 0.02]} />
-          {M(materials.darkWood)}
-        </mesh>
-      </group>
-    )
-  }
-
-  // Bookshelf
-  const shelves = Math.max(3, Math.floor(h / 0.35))
+function Chair({ w, h, d, color = '#8b6334' }: { w: number; h: number; d: number; color?: string }) {
+  const seatY = h * 0.47
+  const legH  = seatY
   return (
     <group>
-      {/* Left panel */}
-      <mesh position={[-w / 2 + panelT / 2, h / 2, 0]} castShadow>
-        <boxGeometry args={[panelT, h, d]} />
-        {M(materials.walnut, col)}
+      {/* Front legs */}
+      {[-w*0.36, w*0.36].map((x, i) => (
+        <mesh key={i} position={[x, legH/2, d*0.32]} castShadow>
+          <cylinderGeometry args={[0.016, 0.02, legH, 8]} />
+          <M color={color} roughness={0.45} />
+        </mesh>
+      ))}
+      {/* Back legs - taller for backrest */}
+      {[-w*0.36, w*0.36].map((x, i) => (
+        <mesh key={i} position={[x, (legH + h*0.5)/2, -d*0.32]} castShadow>
+          <cylinderGeometry args={[0.016, 0.02, legH + h*0.5, 8]} />
+          <M color={color} roughness={0.45} />
+        </mesh>
+      ))}
+      {/* Seat */}
+      <mesh position={[0, seatY, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w*0.88, 0.036, d*0.84]} />
+        <M color={color} roughness={0.5} />
       </mesh>
-      {/* Right panel */}
-      <mesh position={[w / 2 - panelT / 2, h / 2, 0]} castShadow>
-        <boxGeometry args={[panelT, h, d]} />
-        {M(materials.walnut, col)}
+      {/* Seat cushion */}
+      <mesh position={[0, seatY + 0.03, 0]} castShadow>
+        <boxGeometry args={[w*0.84, 0.04, d*0.8]} />
+        <M color="#c8b49a" roughness={0.9} />
       </mesh>
-      {/* Back panel */}
-      <mesh position={[0, h / 2, -d / 2 + 0.008]} castShadow>
-        <boxGeometry args={[w - panelT * 2, h, 0.015]} />
-        {M(materials.medWood, col)}
+      {/* Back rail top */}
+      <mesh position={[0, seatY + h*0.48, -d*0.32]} castShadow>
+        <boxGeometry args={[w*0.84, 0.032, 0.028]} />
+        <M color={color} roughness={0.45} />
       </mesh>
-      {/* Shelves */}
-      {Array.from({ length: shelves + 1 }).map((_, i) => {
-        const y = (i / shelves) * (h - panelT) + panelT / 2
-        return (
-          <mesh key={i} position={[0, y, 0]} castShadow>
-            <boxGeometry args={[w - panelT * 2, panelT, d - 0.01]} />
-            {M(materials.walnut, col)}
-          </mesh>
-        )
-      })}
-      {/* Top cap */}
-      <mesh position={[0, h + 0.008, 0]} castShadow>
-        <boxGeometry args={[w + 0.015, 0.015, d + 0.01]} />
-        {M(materials.walnut, col)}
+      {/* Back rail mid */}
+      <mesh position={[0, seatY + h*0.26, -d*0.32]} castShadow>
+        <boxGeometry args={[w*0.84, 0.022, 0.022]} />
+        <M color={color} roughness={0.45} />
+      </mesh>
+      {/* Back splat */}
+      <mesh position={[0, seatY + h*0.3, -d*0.32]} castShadow>
+        <boxGeometry args={[w*0.32, h*0.44, 0.016]} />
+        <M color={color} roughness={0.48} />
+      </mesh>
+      {/* Stretchers */}
+      <mesh position={[0, legH*0.28, 0]} castShadow>
+        <boxGeometry args={[w*0.72, 0.016, 0.014]} />
+        <M color={color} roughness={0.5} />
       </mesh>
     </group>
   )
 }
 
-// ─── Kitchen ────────────────────────────────────────────────────────
-function Kitchen3D({ w, h, d, color, furnitureId }: { w: number; h: number; d: number; color?: string; furnitureId: string }) {
-  const isFridge = furnitureId.includes('fridge') || furnitureId === 'kitchen-2'
-  const col = color || materials.stainless.color
-
-  if (isFridge) {
-    return (
-      <group>
-        {/* Main body */}
-        <mesh position={[0, h / 2, 0]} castShadow>
-          <boxGeometry args={[w, h, d]} />
-          {M(materials.stainless, col)}
-        </mesh>
-        {/* Top door */}
-        <mesh position={[0, h * 0.72, d / 2 + 0.003]}>
-          <boxGeometry args={[w - 0.04, h * 0.42, 0.005]} />
-          {M(materials.stainless, col)}
-        </mesh>
-        {/* Bottom door */}
-        <mesh position={[0, h * 0.28, d / 2 + 0.003]}>
-          <boxGeometry args={[w - 0.04, h * 0.42, 0.005]} />
-          {M(materials.stainless, col)}
-        </mesh>
-        {/* Handle top */}
-        <mesh position={[w * 0.35, h * 0.65, d / 2 + 0.02]} castShadow>
-          <boxGeometry args={[0.02, 0.2, 0.025]} />
-          {M(materials.chrome)}
-        </mesh>
-        {/* Handle bottom */}
-        <mesh position={[w * 0.35, h * 0.35, d / 2 + 0.02]} castShadow>
-          <boxGeometry args={[0.02, 0.15, 0.025]} />
-          {M(materials.chrome)}
-        </mesh>
-        {/* Gap line */}
-        <mesh position={[0, h * 0.5, d / 2 + 0.006]}>
-          <boxGeometry args={[w - 0.03, 0.01, 0.001]} />
-          {M(materials.blackMetal)}
-        </mesh>
-      </group>
-    )
-  }
-
-  // Kitchen island/cabinet
+function Wardrobe({ w, h, d, color = '#c8bca8' }: { w: number; h: number; d: number; color?: string }) {
   return (
     <group>
       {/* Body */}
-      <mesh position={[0, h / 2, 0]} castShadow>
+      <mesh position={[0, h/2, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        {M(materials.ceramic, col)}
+        <M color={color} roughness={0.55} />
       </mesh>
-      {/* Countertop */}
-      <mesh position={[0, h + 0.015, 0]} castShadow>
-        <boxGeometry args={[w + 0.03, 0.03, d + 0.02]} />
-        {M(materials.marble)}
+      {/* Door panels */}
+      {[-w/4, w/4].map((x, i) => (
+        <group key={i}>
+          <mesh position={[x, h/2, d/2 + 0.002]}>
+            <boxGeometry args={[w/2 - 0.018, h - 0.024, 0.006]} />
+            <M color={`${color}ee`} roughness={0.5} />
+          </mesh>
+          {/* Door inset panel */}
+          <mesh position={[x, h/2, d/2 + 0.006]}>
+            <boxGeometry args={[w/2 - 0.08, h - 0.12, 0.004]} />
+            <M color={`${color}cc`} roughness={0.52} />
+          </mesh>
+          {/* Handle */}
+          <mesh position={[x + (i===0 ? w*0.18 : -w*0.18), h*0.5, d/2 + 0.018]} castShadow>
+            <boxGeometry args={[0.012, 0.1, 0.016]} />
+            <M color="#c0b090" roughness={0.3} metalness={0.5} />
+          </mesh>
+        </group>
+      ))}
+      {/* Center divider */}
+      <mesh position={[0, h/2, d/2 + 0.001]}>
+        <boxGeometry args={[0.014, h, 0.008]} />
+        <M color="#8a7a6a" roughness={0.5} />
       </mesh>
-      {/* Drawer lines */}
-      {[0.3, 0.55, 0.8].map((ratio, i) => (
-        <mesh key={i} position={[0, h * ratio, d / 2 + 0.002]}>
-          <boxGeometry args={[w * 0.9, 0.008, 0.002]} />
-          {M(materials.blackMetal)}
+      {/* Top/bottom trim */}
+      {[h - 0.02, 0.02].map((y, i) => (
+        <mesh key={i} position={[0, y, d/2 + 0.003]}>
+          <boxGeometry args={[w + 0.01, 0.018, 0.01]} />
+          <M color="#8a7a6a" roughness={0.45} />
         </mesh>
       ))}
-      {/* Handles */}
-      {[0.42, 0.67].map((ratio, i) => (
-        <mesh key={i} position={[0, h * ratio, d / 2 + 0.015]} castShadow>
-          <boxGeometry args={[w * 0.2, 0.015, 0.015]} />
-          {M(materials.chrome)}
+      {/* Feet */}
+      {[[-w*0.44, 0.04],[w*0.44, 0.04]].map(([x, y], i) => (
+        <mesh key={i} position={[x, y, 0]} castShadow>
+          <boxGeometry args={[0.06, 0.08, d*0.7]} />
+          <M color="#6a5a4a" roughness={0.4} />
         </mesh>
       ))}
     </group>
   )
 }
 
-// ─── Bathroom ───────────────────────────────────────────────────────
-function Bath3D({ w, h, d, furnitureId }: { w: number; h: number; d: number; furnitureId: string }) {
-  const isToilet = furnitureId.includes('toilet')
-
-  if (isToilet) {
-    return (
-      <group>
-        {/* Base/bowl */}
-        <mesh position={[0, h * 0.25, d * 0.05]} castShadow>
-          <cylinderGeometry args={[w * 0.4, w * 0.35, h * 0.5, 16]} />
-          {M(materials.ceramic)}
-        </mesh>
-        {/* Tank */}
-        <mesh position={[0, h * 0.5, -d * 0.32]} castShadow>
-          <boxGeometry args={[w * 0.7, h * 0.55, d * 0.25]} />
-          {M(materials.ceramic)}
-        </mesh>
-        {/* Seat */}
-        <mesh position={[0, h * 0.5, d * 0.05]} castShadow>
-          <cylinderGeometry args={[w * 0.38, w * 0.38, 0.03, 16]} />
-          {M(materials.ceramic)}
-        </mesh>
-        {/* Lid */}
-        <mesh position={[0, h * 0.52, d * 0.05]} castShadow>
-          <cylinderGeometry args={[w * 0.36, w * 0.36, 0.02, 16]} />
-          {M(materials.ceramic)}
-        </mesh>
-        {/* Flush button */}
-        <mesh position={[0, h * 0.8, -d * 0.32]} castShadow>
-          <cylinderGeometry args={[0.025, 0.025, 0.015, 12]} />
-          {M(materials.chrome)}
-        </mesh>
-      </group>
-    )
-  }
-
-  // Bathtub
+function Desk({ w, h, d, color = '#b8a888' }: { w: number; h: number; d: number; color?: string }) {
   return (
     <group>
-      {/* Outer shell */}
-      <mesh position={[0, h * 0.4, 0]} castShadow>
-        <boxGeometry args={[w, h * 0.8, d]} />
-        {M(materials.ceramic)}
+      {/* Desktop */}
+      <mesh position={[0, h - 0.02, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, 0.04, d]} />
+        <M color={color} roughness={0.45} />
       </mesh>
-      {/* Inner cavity (darker to simulate depth) */}
-      <mesh position={[0, h * 0.5, 0]}>
-        <boxGeometry args={[w - 0.08, h * 0.5, d - 0.08]} />
-        <meshStandardMaterial color="#e8e8e8" roughness={0.2} metalness={0.05} />
+      {/* Side panels */}
+      {[-w/2 + 0.025, w/2 - 0.025].map((x, i) => (
+        <mesh key={i} position={[x, (h-0.04)/2, 0]} castShadow>
+          <boxGeometry args={[0.05, h - 0.04, d]} />
+          <M color={color} roughness={0.48} />
+        </mesh>
+      ))}
+      {/* Back panel */}
+      <mesh position={[0, h*0.4, -d/2 + 0.02]} castShadow>
+        <boxGeometry args={[w - 0.1, h*0.6, 0.018]} />
+        <M color={color} roughness={0.5} />
       </mesh>
-      {/* Rim */}
-      <mesh position={[0, h * 0.8, 0]} castShadow>
-        <boxGeometry args={[w + 0.02, 0.04, d + 0.02]} />
-        {M(materials.ceramic)}
+      {/* Drawer unit */}
+      <mesh position={[w*0.28, h*0.28, 0]}>
+        <boxGeometry args={[w*0.3, h*0.44, d*0.88]} />
+        <M color={`${color}dd`} roughness={0.5} />
       </mesh>
-      {/* Faucet */}
-      <mesh position={[0, h * 0.9, -d * 0.4]} castShadow>
-        <cylinderGeometry args={[0.02, 0.02, h * 0.2, 8]} />
-        {M(materials.chrome)}
-      </mesh>
-      <mesh position={[0, h, -d * 0.35]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <cylinderGeometry args={[0.015, 0.015, 0.12, 8]} />
-        {M(materials.chrome)}
-      </mesh>
+      {[0.38, 0.22, 0.06].map((y, i) => (
+        <mesh key={i} position={[w*0.28, h*y, d*0.44 + 0.012]}>
+          <boxGeometry args={[w*0.26, 0.01, 0.008]} />
+          <M color="#888" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
     </group>
   )
 }
 
-// ─── Decor ──────────────────────────────────────────────────────────
-function Decor3D({ w, h, d, furnitureId, color }: { w: number; h: number; d: number; furnitureId: string; color?: string }) {
-  const isPlant = furnitureId.includes('plant') || furnitureId === 'decor-1'
-
-  if (isPlant) {
-    return (
-      <group>
-        {/* Pot */}
-        <mesh position={[0, 0.1, 0]} castShadow>
-          <cylinderGeometry args={[w * 0.32, w * 0.25, 0.2, 12]} />
-          {M(materials.terracotta)}
-        </mesh>
-        {/* Pot rim */}
-        <mesh position={[0, 0.2, 0]} castShadow>
-          <cylinderGeometry args={[w * 0.34, w * 0.32, 0.03, 12]} />
-          {M(materials.terracotta)}
-        </mesh>
-        {/* Soil */}
-        <mesh position={[0, 0.19, 0]}>
-          <cylinderGeometry args={[w * 0.28, w * 0.28, 0.02, 12]} />
-          <meshStandardMaterial color="#3d2b1f" roughness={0.95} metalness={0} />
-        </mesh>
-        {/* Main foliage — layered spheres */}
-        <mesh position={[0, h * 0.55, 0]}>
-          <sphereGeometry args={[w * 0.45, 12, 10]} />
-          {M(materials.greenery)}
-        </mesh>
-        <mesh position={[w * 0.08, h * 0.65, w * 0.05]}>
-          <sphereGeometry args={[w * 0.35, 10, 8]} />
-          <meshStandardMaterial color="#3a7a33" roughness={0.85} metalness={0} />
-        </mesh>
-        <mesh position={[-w * 0.06, h * 0.48, -w * 0.04]}>
-          <sphereGeometry args={[w * 0.3, 10, 8]} />
-          <meshStandardMaterial color="#245a1e" roughness={0.88} metalness={0} />
-        </mesh>
-        {/* Stem */}
-        <mesh position={[0, h * 0.3, 0]}>
-          <cylinderGeometry args={[0.015, 0.02, h * 0.3, 6]} />
-          <meshStandardMaterial color="#4a3520" roughness={0.8} metalness={0} />
-        </mesh>
-      </group>
-    )
-  }
-
-  // Rug
+function CoffeeTable({ w, h, d, color = '#8b6334' }: { w: number; h: number; d: number; color?: string }) {
   return (
-    <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[w, d]} />
-      <meshStandardMaterial color={color || '#8b7355'} roughness={0.95} metalness={0} />
+    <group>
+      <mesh position={[0, h - 0.025, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, 0.05, d]} />
+        <M color={color} roughness={0.42} />
+      </mesh>
+      {/* Lower shelf */}
+      <mesh position={[0, h*0.28, 0]} castShadow>
+        <boxGeometry args={[w*0.82, 0.028, d*0.82]} />
+        <M color={color} roughness={0.5} />
+      </mesh>
+      {/* Legs - metal hairpin style */}
+      {[[-w*0.42,-d*0.38],[w*0.42,-d*0.38],[-w*0.42,d*0.38],[w*0.42,d*0.38]].map(([x,z],i) => (
+        <mesh key={i} position={[x, (h-0.05)/2, z]} castShadow>
+          <cylinderGeometry args={[0.012, 0.012, h - 0.05, 6]} />
+          <M color="#4a4a4a" roughness={0.2} metalness={0.85} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function Bookshelf({ w, h, d, color = '#a08060' }: { w: number; h: number; d: number; color?: string }) {
+  const shelves = Math.max(3, Math.floor(h / 0.32))
+  const pt = 0.022
+  return (
+    <group>
+      {/* Side panels */}
+      {[-w/2 + pt/2, w/2 - pt/2].map((x, i) => (
+        <mesh key={i} position={[x, h/2, 0]} castShadow>
+          <boxGeometry args={[pt, h, d]} />
+          <M color={color} roughness={0.5} />
+        </mesh>
+      ))}
+      {/* Back panel */}
+      <mesh position={[0, h/2, -d/2 + 0.008]}>
+        <boxGeometry args={[w - pt*2, h, 0.015]} />
+        <M color={`${color}aa`} roughness={0.6} />
+      </mesh>
+      {/* Shelves */}
+      {Array.from({ length: shelves + 1 }).map((_, i) => (
+        <mesh key={i} position={[0, (i/shelves)*(h-pt) + pt/2, 0]} castShadow>
+          <boxGeometry args={[w - pt*2, pt, d - 0.01]} />
+          <M color={color} roughness={0.5} />
+        </mesh>
+      ))}
+      {/* Decorative items on shelves */}
+      {Array.from({ length: shelves - 1 }).map((_, i) => (
+        <mesh key={i} position={[-w*0.2, ((i+1)/shelves)*(h-pt) + pt + 0.06, 0]} castShadow>
+          <boxGeometry args={[w*0.08, 0.12, d*0.5]} />
+          <M color={i%2===0 ? '#4a6a8a' : '#8a4a4a'} roughness={0.7} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function Lamp({ w, h }: { w: number; h: number }) {
+  return (
+    <group>
+      {/* Base */}
+      <mesh position={[0, 0.025, 0]} castShadow>
+        <cylinderGeometry args={[w*0.35, w*0.4, 0.05, 16]} />
+        <M color="#c8b878" roughness={0.25} metalness={0.7} />
+      </mesh>
+      {/* Stem */}
+      <mesh position={[0, h*0.44, 0]} castShadow>
+        <cylinderGeometry args={[0.014, 0.018, h*0.82, 8]} />
+        <M color="#c8b878" roughness={0.25} metalness={0.7} />
+      </mesh>
+      {/* Shade outer */}
+      <mesh position={[0, h*0.88, 0]}>
+        <cylinderGeometry args={[w*0.18, w*0.48, h*0.22, 16, 1, true]} />
+        <meshStandardMaterial color="#f5e8d0" roughness={0.9} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Light source */}
+      <pointLight position={[0, h*0.86, 0]} intensity={0.8} distance={6} color="#fff5e0" castShadow={false} />
+    </group>
+  )
+}
+
+function Plant({ w, h, d }: { w: number; h: number; d: number }) {
+  return (
+    <group>
+      {/* Pot */}
+      <mesh position={[0, h*0.12, 0]} castShadow>
+        <cylinderGeometry args={[w*0.3, w*0.22, h*0.24, 12]} />
+        <M color="#b05a30" roughness={0.75} />
+      </mesh>
+      {/* Soil */}
+      <mesh position={[0, h*0.245, 0]}>
+        <cylinderGeometry args={[w*0.29, w*0.29, 0.015, 12]} />
+        <M color="#3a2a18" roughness={0.95} />
+      </mesh>
+      {/* Main foliage */}
+      <mesh position={[0, h*0.58, 0]}>
+        <sphereGeometry args={[w*0.44, 12, 10]} />
+        <M color="#2d6a22" roughness={0.88} />
+      </mesh>
+      {/* Secondary clusters */}
+      {[[w*0.2, h*0.52, w*0.15],[- w*0.18, h*0.65, -w*0.1],[w*0.08, h*0.72, -w*0.18]].map(([x,y,z],i) => (
+        <mesh key={i} position={[x, y, z]}>
+          <sphereGeometry args={[w*(0.24+i*0.04), 10, 8]} />
+          <M color={i%2===0 ? '#3a7a2a' : '#256a1e'} roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function TVStand({ w, h, d, color = '#3a3028' }: { w: number; h: number; d: number; color?: string }) {
+  return (
+    <group>
+      {/* Main body */}
+      <mesh position={[0, h/2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <M color={color} roughness={0.4} />
+      </mesh>
+      {/* Doors */}
+      {[-w*0.27, w*0.27].map((x,i) => (
+        <group key={i}>
+          <mesh position={[x, h*0.38, d/2+0.003]}>
+            <boxGeometry args={[w*0.38, h*0.62, 0.006]} />
+            <M color={`${color}dd`} roughness={0.38} />
+          </mesh>
+          <mesh position={[x + (i===0?w*0.14:-w*0.14), h*0.38, d/2+0.016]}>
+            <boxGeometry args={[0.01, 0.06, 0.012]} />
+            <M color="#aaa" roughness={0.2} metalness={0.8} />
+          </mesh>
+        </group>
+      ))}
+      {/* Legs */}
+      {[[-w*0.44,0],[w*0.44,0],[-w*0.44,0],[w*0.44,0]].map(([x],i) => (
+        <mesh key={i} position={[x, -h*0.04, i<2?-d*0.38:d*0.38]} castShadow>
+          <cylinderGeometry args={[0.022, 0.022, h*0.08, 6]} />
+          <M color="#1a1a1a" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function Generic({ w, h, d, color = '#b8a888' }: { w: number; h: number; d: number; color?: string }) {
+  return (
+    <mesh position={[0, h/2, 0]} castShadow receiveShadow>
+      <boxGeometry args={[w, h, d]} />
+      <M color={color} roughness={0.6} />
     </mesh>
   )
 }
 
-// ─── Lighting ───────────────────────────────────────────────────────
-function Light3D({ w, h, d }: { w: number; h: number; d: number }) {
-  const isFloor = h > 1
-  
-  if (isFloor) {
-    return (
-      <group>
-        {/* Base */}
-        <mesh position={[0, 0.015, 0]} castShadow>
-          <cylinderGeometry args={[w * 0.5, w * 0.55, 0.03, 16]} />
-          {M(materials.brass)}
-        </mesh>
-        {/* Pole */}
-        <mesh position={[0, h * 0.45, 0]} castShadow>
-          <cylinderGeometry args={[0.015, 0.018, h * 0.8, 8]} />
-          {M(materials.brass)}
-        </mesh>
-        {/* Shade - truncated cone */}
-        <mesh position={[0, h * 0.88, 0]}>
-          <cylinderGeometry args={[w * 0.15, w * 0.5, h * 0.2, 16, 1, true]} />
-          {M(materials.lampShade)}
-        </mesh>
-        {/* Shade top cap */}
-        <mesh position={[0, h * 0.98, 0]}>
-          <cylinderGeometry args={[w * 0.15, w * 0.15, 0.01, 16]} />
-          {M(materials.lampShade)}
-        </mesh>
-        {/* Light glow */}
-        <pointLight position={[0, h * 0.85, 0]} intensity={0.5} distance={4} color="#fff5e0" />
-      </group>
-    )
-  }
+// ── Route to correct model ────────────────────────────────────────
+function ProceduralModel({ category, furnitureId, w, h, d, color }: {
+  category: string; furnitureId: string; w: number; h: number; d: number; color?: string
+}) {
+  const id = furnitureId.toLowerCase()
+  if (id.includes('sofa') || category === 'sofa') return <Sofa w={w} h={h} d={d} color={color} />
+  if (id.includes('bed') || category === 'bed') return <Bed w={w} h={h} d={d} color={color} />
+  if (id.includes('wardrobe') || id.includes('closet')) return <Wardrobe w={w} h={h} d={d} color={color} />
+  if (id.includes('desk') || category === 'desk') return <Desk w={w} h={h} d={d} color={color} />
+  if (id.includes('bookshelf') || id.includes('shelf') || id.includes('bookcase')) return <Bookshelf w={w} h={h} d={d} color={color} />
+  if (id.includes('coffee') || id.includes('ctable')) return <CoffeeTable w={w} h={h} d={d} color={color} />
+  if (id.includes('dining') || id.includes('dtable') || category === 'table') return <DiningTable w={w} h={h} d={d} color={color} />
+  if (id.includes('chair') || category === 'chair') return <Chair w={w} h={h} d={d} color={color} />
+  if (id.includes('tvstand') || id.includes('tv-stand') || id.includes('media')) return <TVStand w={w} h={h} d={d} color={color} />
+  if (id.includes('lamp') || id.includes('light') || category === 'light') return <Lamp w={w} h={h} />
+  if (id.includes('plant') || id.includes('decor')) return <Plant w={w} h={h} d={d} />
+  return <Generic w={w} h={h} d={d} color={color} />
+}
 
-  // Table lamp
+function TryGLB({ glbUrl, w, h, d, color, category, furnitureId }: {
+  glbUrl: string; w: number; h: number; d: number
+  color?: string; category: string; furnitureId: string
+}) {
+  const fallback = <ProceduralModel category={category} furnitureId={furnitureId} w={w} h={h} d={d} color={color} />
   return (
-    <group>
-      {/* Base */}
-      <mesh position={[0, 0.02, 0]} castShadow>
-        <cylinderGeometry args={[w * 0.35, w * 0.4, 0.04, 12]} />
-        {M(materials.brass)}
-      </mesh>
-      {/* Stem */}
-      <mesh position={[0, h * 0.35, 0]} castShadow>
-        <cylinderGeometry args={[0.012, 0.015, h * 0.5, 8]} />
-        {M(materials.brass)}
-      </mesh>
-      {/* Shade */}
-      <mesh position={[0, h * 0.75, 0]}>
-        <cylinderGeometry args={[w * 0.2, w * 0.55, h * 0.4, 16, 1, true]} />
-        {M(materials.lampShade)}
-      </mesh>
-      <pointLight position={[0, h * 0.7, 0]} intensity={0.3} distance={2.5} color="#fff5e0" />
-    </group>
+    <GLBBoundary fallback={fallback}>
+      <Suspense fallback={fallback}>
+        <GLBModel url={glbUrl} w={w} h={h} d={d} />
+      </Suspense>
+    </GLBBoundary>
   )
 }
 
-// ─── Generic Fallback ───────────────────────────────────────────────
-function GenericFurniture({ w, h, d, color }: { w: number; h: number; d: number; color?: string }) {
-  return (
-    <group>
-      <mesh position={[0, h / 2, 0]} castShadow>
-        <boxGeometry args={[w, h, d]} />
-        {M(materials.oak, color)}
-      </mesh>
-      <mesh position={[0, h / 2, d / 2 + 0.001]}>
-        <boxGeometry args={[w - 0.04, h - 0.04, 0.002]} />
-        {M(materials.medWood, color)}
-      </mesh>
-    </group>
-  )
-}
-
-// ─── Main Export ────────────────────────────────────────────────────
+// ── Main export ───────────────────────────────────────────────────
 export default function FurnitureItem3D({ item }: { item: PlacedItem }) {
-  const x = item.x / SCALE
-  const z = item.y / SCALE
+  const x   = item.x / SCALE
+  const z   = item.y / SCALE
   const rot = -(item.rotation * Math.PI) / 180
-  const w = item.width
-  const h = item.height
-  const d = item.depth
   const cat = (item.furnitureId || '').split('-')[0]
-
+  const glbUrl = `/models/furniture/${item.furnitureId}.glb`
   return (
     <group position={[x, 0, z]} rotation={[0, rot, 0]}>
-      {cat === 'sofa' && <Sofa3D w={w} h={h} d={d} color={item.color} />}
-      {cat === 'chair' && <Chair3D w={w} h={h} d={d} color={item.color} />}
-      {cat === 'bed' && <Bed3D w={w} h={h} d={d} color={item.color} />}
-      {(cat === 'table' || cat === 'desk') && <Table3D w={w} h={h} d={d} color={item.color} />}
-      {cat === 'storage' && <Storage3D w={w} h={h} d={d} color={item.color} furnitureId={item.furnitureId} />}
-      {cat === 'kitchen' && <Kitchen3D w={w} h={h} d={d} color={item.color} furnitureId={item.furnitureId} />}
-      {cat === 'bath' && <Bath3D w={w} h={h} d={d} furnitureId={item.furnitureId} />}
-      {cat === 'decor' && <Decor3D w={w} h={h} d={d} furnitureId={item.furnitureId} color={item.color} />}
-      {cat === 'light' && <Light3D w={w} h={h} d={d} />}
-      {!['sofa', 'chair', 'bed', 'table', 'desk', 'storage', 'kitchen', 'bath', 'decor', 'light'].includes(cat) && (
-        <GenericFurniture w={w} h={h} d={d} color={item.color} />
-      )}
+      <TryGLB
+        glbUrl={glbUrl}
+        category={cat}
+        furnitureId={item.furnitureId}
+        w={item.width}
+        h={item.height}
+        d={item.depth}
+        color={item.color}
+      />
     </group>
   )
 }

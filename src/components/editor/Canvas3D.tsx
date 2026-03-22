@@ -1,252 +1,157 @@
-import React, { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
+import React, { Component, useEffect, useState, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
+import { OrbitControls, Environment, PerspectiveCamera, Sky, ContactShadows, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import * as THREE from 'three'
 import { useEditorStore } from '@/store/useEditorStore'
-import { AlertTriangle, ExternalLink, Compass } from 'lucide-react'
+import { Sun, Grid3x3, Camera, AlertTriangle } from 'lucide-react'
 import FurnitureItem3D from '@/components/editor/FurnitureModel3D'
 
-type WebGLErrorBoundaryProps = {
-  children: ReactNode
-  onError: () => void
-}
-
-class WebGLErrorBoundary extends Component<WebGLErrorBoundaryProps, { hasError: boolean }> {
-  state = { hasError: false }
-  static getDerivedStateFromError() { return { hasError: true } }
-  componentDidCatch() {
-    this.props.onError()
-  }
-  render() {
-    if (this.state.hasError) return null
-    return this.props.children
-  }
-}
-
-function WebGLFallback({ liteModeAttempted = false }: { liteModeAttempted?: boolean }) {
-  return (
-    <div className="w-full h-full flex items-center justify-center bg-muted">
-      <div className="text-center max-w-sm px-6">
-        <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-        <p className="text-sm font-display font-semibold text-foreground">3D View Unavailable</p>
-        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          {liteModeAttempted
-            ? 'WebGL failed even in low-power mode in this sandboxed preview.'
-            : "WebGL isn't available in this sandboxed preview."}{' '}
-          Click <strong>"Open in new tab"</strong> (top-right of the preview) to test the full 3D view in your browser.
-        </p>
-        <button
-          onClick={() => window.open(window.location.href, '_blank', 'noopener,noreferrer')}
-          className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs text-accent hover:opacity-90 transition-opacity"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          <span className="font-medium">Open in new tab to use 3D</span>
-        </button>
-      </div>
-    </div>
-  )
+class ErrorBoundary extends Component<{ children: ReactNode; onError: () => void }, { err: boolean }> {
+  state = { err: false }
+  static getDerivedStateFromError() { return { err: true } }
+  componentDidCatch() { this.props.onError() }
+  render() { return this.state.err ? null : this.props.children }
 }
 
 const SCALE = 50
-type RenderQuality = 'full' | 'lite' | 'unsupported'
 
 function Wall3D({ wall }: { wall: any }) {
-  const dx = wall.x2 - wall.x1
-  const dy = wall.y2 - wall.y1
-  const length = Math.sqrt(dx * dx + dy * dy) / SCALE
+  const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1
+  const len = Math.sqrt(dx*dx + dy*dy) / SCALE
   const angle = Math.atan2(dy, dx)
   const cx = (wall.x1 + wall.x2) / 2 / SCALE
-  const cy = (wall.y1 + wall.y2) / 2 / SCALE
-  const height = wall.height || 2.7
-  const thickness = wall.thickness / SCALE
-
+  const cz = (wall.y1 + wall.y2) / 2 / SCALE
+  const wh = wall.height || 2.7
+  const th = (wall.thickness || 15) / SCALE
   return (
-    <mesh position={[cx, height / 2, cy]} rotation={[0, -angle, 0]} castShadow receiveShadow>
-      <boxGeometry args={[length, height, thickness]} />
-      <meshStandardMaterial color="#d4d4d8" roughness={0.8} />
+    <mesh position={[cx, wh/2, cz]} rotation={[0, -angle, 0]} castShadow receiveShadow>
+      <boxGeometry args={[len, wh, th]} />
+      <meshStandardMaterial color="#e8e6e1" roughness={0.85} />
     </mesh>
   )
 }
 
-// Removed old FurnitureItem3D — now imported from FurnitureModel3D
-
-function Ground() {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-      <planeGeometry args={[100, 100]} />
-      <meshStandardMaterial color="#f0f0ec" />
-    </mesh>
-  )
-}
-
-function CompassIndicator() {
-  return (
-    <Html position={[0, 0.1, 0]} center style={{ pointerEvents: 'none' }}>
-      <div className="flex flex-col items-center opacity-40">
-        <span className="text-[10px] font-bold text-red-500">N</span>
-        <div className="w-px h-3 bg-red-400" />
-      </div>
-    </Html>
-  )
-}
-
-function RoomFloor3D({ room }: { room: any }) {
-  if (room.points.length < 3) return null
-  const points = room.points.map((p: { x: number; y: number }) => [p.x / SCALE, 0, p.y / SCALE] as [number, number, number])
+function RoomFloor({ room }: { room: any }) {
+  if (!room.points || room.points.length < 3) return null
   const shape = new THREE.Shape()
-  shape.moveTo(points[0][0], points[0][2])
-  for (let i = 1; i < points.length; i++) {
-    shape.lineTo(points[i][0], points[i][2])
-  }
+  shape.moveTo(room.points[0].x / SCALE, room.points[0].y / SCALE)
+  room.points.slice(1).forEach((p: any) => shape.lineTo(p.x / SCALE, p.y / SCALE))
   shape.closePath()
-  const geom = new THREE.ShapeGeometry(shape)
   return (
-    <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <primitive object={geom} attach="geometry" />
-      <meshStandardMaterial color={room.floorColor || '#f3f4f6'} roughness={0.9} />
+    <mesh rotation={[-Math.PI/2, 0, 0]} receiveShadow>
+      <primitive object={new THREE.ShapeGeometry(shape)} attach="geometry" />
+      <meshStandardMaterial color={room.floorColor || '#f5f3ee'} roughness={0.9} />
     </mesh>
   )
 }
 
-function Scene({ quality = 'full' }: { quality?: RenderQuality }) {
+function Scene({ quality, showGrid, showSky }: { quality: string; showGrid: boolean; showSky: boolean }) {
   const { walls, placedItems, rooms } = useEditorStore()
-  const isLite = quality === 'lite'
-
+  const lite = quality === 'lite'
   return (
     <>
-      <PerspectiveCamera makeDefault position={[10, 8, 10]} fov={50} />
-      <OrbitControls
-        enableDamping
-        dampingFactor={0.05}
-        enablePan
-        enableZoom
-        enableRotate
-        maxPolarAngle={Math.PI / 2.1}
-        minDistance={3}
-        maxDistance={50}
-      />
-
-      <ambientLight intensity={0.5} />
-      <directionalLight
-        position={[10, 15, 10]}
-        intensity={1.2}
-        castShadow={!isLite}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={50}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
-      />
-      <hemisphereLight args={['#b1c4e0', '#e8dcc8', 0.4]} />
-
-      <Ground />
-      {rooms.map((room) => (
-        <RoomFloor3D key={room.id} room={room} />
-      ))}
-      <CompassIndicator />
-
-      {!isLite && (
-        <Grid
-          position={[0, 0, 0]}
-          args={[100, 100]}
-          cellSize={1}
-          cellThickness={0.5}
-          cellColor="#d4d4d8"
-          sectionSize={5}
-          sectionThickness={1}
-          sectionColor="#a1a1aa"
-          fadeDistance={50}
-          infiniteGrid
-        />
-      )}
-
-      {walls.map((wall) => (
-        <Wall3D key={wall.id} wall={wall} />
-      ))}
-
-      {placedItems.map((item) => (
-        <FurnitureItem3D key={item.id} item={item} />
-      ))}
-
-      {!isLite && <Environment preset="apartment" />}
+      <PerspectiveCamera makeDefault position={[0, 12, 14]} fov={50} />
+      <OrbitControls enableDamping dampingFactor={0.06} maxPolarAngle={Math.PI * 0.85} minDistance={1} maxDistance={80} enablePan={true} panSpeed={0.8} />
+      <ambientLight intensity={lite ? 0.8 : 0.45} />
+      <directionalLight position={[12, 18, 8]} intensity={1.4} castShadow={!lite}
+        shadow-mapSize-width={1024} shadow-mapSize-height={1024}
+        shadow-camera-far={60} shadow-camera-left={-25} shadow-camera-right={25}
+        shadow-camera-top={25} shadow-camera-bottom={-25} />
+      <directionalLight position={[-8, 10, -5]} intensity={0.4} />
+      <hemisphereLight args={['#c8d8f0', '#d8c8a8', 0.5]} />
+      {showSky ? <Sky sunPosition={[100, 20, 100]} /> : <color attach="background" args={['#f0eee9']} />}
+      {!lite && <Environment preset="apartment" />}
+      {!lite && <ContactShadows position={[0,0,0]} opacity={0.3} scale={30} blur={1.5} far={8} />}
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, -0.005, 0]} receiveShadow>
+        <planeGeometry args={[200, 200]} />
+        <meshStandardMaterial color="#eae8e3" roughness={0.95} />
+      </mesh>
+      {rooms.map((r: any) => <RoomFloor key={r.id} room={r} />)}
+      {walls.map((w: any) => <Wall3D key={w.id} wall={w} />)}
+      {placedItems.map((item: any) => <FurnitureItem3D key={item.id} item={item} />)}
+      {/* Grid removed - uses inverse() not supported in WebGL1 */}
+      <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
+        <GizmoViewport axisColors={['#e05555', '#50c878', '#5588e0']} labelColor="white" />
+      </GizmoHelper>
     </>
   )
 }
 
-function CanvasLoading() {
-  return (
+export default function Canvas3DView() {
+  const [quality, setQuality] = useState('full')
+  const [seed, setSeed] = useState(0)
+  const [ready, setReady] = useState(false)
+  const [showGrid, setShowGrid] = useState(true)
+  const [showSky, setShowSky] = useState(false)
+
+  useEffect(() => { setReady(true) }, [])
+
+  const onError = () => {
+    setSeed(s => s + 1)
+    setQuality(q => q === 'full' ? 'lite' : 'broken')
+  }
+
+  if (!ready) return (
+    <div className="w-full h-full flex items-center justify-center bg-[#f0eee9]">
+      <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  if (quality === 'broken') return (
     <div className="w-full h-full flex items-center justify-center bg-muted">
-      <div className="text-center">
-        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-        <p className="text-xs text-muted-foreground">Loading 3D…</p>
+      <div className="text-center px-6">
+        <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-amber-500" />
+        <p className="text-sm font-semibold mb-1">WebGL Unavailable</p>
+        <p className="text-xs text-muted-foreground mb-4">Your browser or GPU doesn't support WebGL.</p>
+        <button onClick={() => window.open(window.location.href, '_blank')}
+          className="px-3 py-2 rounded-lg border border-border bg-card text-xs hover:bg-muted">
+          Try in new tab
+        </button>
       </div>
     </div>
   )
-}
-
-export default function Canvas3DView() {
-  const [quality, setQuality] = useState<RenderQuality>('full')
-  const [retrySeed, setRetrySeed] = useState(0)
-
-  const supportsWebGL = useMemo(() => {
-    if (typeof document === 'undefined') return true
-    const probe = document.createElement('canvas')
-    return Boolean(
-      probe.getContext('webgl2') ||
-      probe.getContext('webgl') ||
-      probe.getContext('experimental-webgl')
-    )
-  }, [])
-
-  useEffect(() => {
-    if (!supportsWebGL) setQuality('unsupported')
-  }, [supportsWebGL])
-
-  const handleWebGLError = () => {
-    setRetrySeed((prev) => prev + 1)
-    setQuality((prev) => (prev === 'full' ? 'lite' : 'unsupported'))
-  }
-
-  if (quality === 'unsupported') {
-    return <WebGLFallback liteModeAttempted />
-  }
-
-  const isLite = quality === 'lite'
 
   return (
-    <div className="w-full h-full bg-muted relative">
-      <WebGLErrorBoundary key={`webgl-${quality}-${retrySeed}`} onError={handleWebGLError}>
-        <Canvas
-          shadows={!isLite}
-          dpr={isLite ? [1, 1.25] : [1, 2]}
-          fallback={<CanvasLoading />}
+    <div className="w-full h-full relative" style={{ background: '#f0eee9' }}>
+      <ErrorBoundary key={`${quality}-${seed}`} onError={onError}>
+        <Canvas shadows={quality !== 'lite'} dpr={[1, 1.5]}
           gl={{
-            failIfMajorPerformanceCaveat: false,
-            antialias: !isLite,
-            alpha: false,
-            stencil: false,
-            depth: true,
-            powerPreference: isLite ? 'low-power' : 'high-performance',
-          }}
+          failIfMajorPerformanceCaveat: false,
+          antialias: quality !== 'lite',
+          powerPreference: 'low-power',
+          alpha: false,
+        }}
           onCreated={({ gl }) => {
-            gl.setClearColor(new THREE.Color('#f8f9ff'), 1)
-          }}
-        >
-          <Scene quality={quality} />
+            gl.setClearColor(new THREE.Color('#f0eee9'), 1)
+            if (quality !== 'lite') {
+              gl.shadowMap.enabled = true
+              gl.shadowMap.type = THREE.PCFSoftShadowMap
+            }
+          }}>
+          <Scene quality={quality} showGrid={showGrid} showSky={showSky} />
         </Canvas>
-      </WebGLErrorBoundary>
+      </ErrorBoundary>
 
-      {isLite && (
-        <div className="absolute top-3 left-3 rounded-md border border-border bg-card/80 px-2 py-1 text-[10px] text-muted-foreground backdrop-blur-sm">
-          Low-power 3D mode enabled
-        </div>
-      )}
+      <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
+        {[
+          { icon: Grid3x3, active: showGrid, toggle: () => setShowGrid(g => !g), title: 'Grid' },
+          { icon: Sun, active: showSky, toggle: () => setShowSky(s => !s), title: 'Sky' },
+        ].map(({ icon: Icon, active, toggle, title }) => (
+          <button key={title} onClick={toggle} title={title}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-colors ${
+              active ? 'bg-accent text-accent-foreground border-accent' : 'bg-card/80 backdrop-blur-sm border-border text-muted-foreground hover:bg-card'
+            }`}>
+            <Icon className="w-4 h-4" />
+          </button>
+        ))}
+        <button onClick={() => setQuality(q => q === 'full' ? 'lite' : 'full')} title="Toggle quality"
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-card/80 backdrop-blur-sm border border-border text-muted-foreground hover:bg-card">
+          <Camera className="w-4 h-4" />
+        </button>
+      </div>
 
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">
-        <Compass className="w-3 h-3" />
-        <span>Orbit: drag · Zoom: scroll · Pan: right-drag</span>
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-card/80 backdrop-blur-sm border border-border rounded-full px-4 py-1.5 text-[10px] text-muted-foreground pointer-events-none">
+        Drag · Scroll to zoom · Right-drag to pan
       </div>
     </div>
   )
