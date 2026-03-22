@@ -12,11 +12,19 @@ export default function Canvas2D() {
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const [roomStart, setRoomStart] = useState<{ x: number; y: number } | null>(null)
+  const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
+
+  useEffect(() => {
+    if (activeTool !== 'room') setRoomStart(null)
+  }, [activeTool])
+  const [isPanning, setIsPanning] = useState(false)
+  const lastPanRef = useRef({ x: 0, y: 0 })
 
   const {
-    activeTool, walls, placedItems, selectedId,
+    activeTool, walls, placedItems, selectedId, doors, windows, rooms,
     snapToGrid, gridSize, zoom,
-    addWall, setSelected, updateItem,
+    addWall, addRoom, addDoor, addWindow, setSelected, updateItem,
   } = useEditorStore()
 
   useEffect(() => {
@@ -39,27 +47,85 @@ export default function Canvas2D() {
     const stage = e.target.getStage()
     const pos = stage.getPointerPosition()
     if (!pos) return
-    const x = snap(pos.x / zoom)
-    const y = snap(pos.y / zoom)
+    const x = snap(pos.x / zoom - stagePos.x / zoom)
+    const y = snap(pos.y / zoom - stagePos.y / zoom)
+
+    if (e.evt.button === 1 || (e.evt.button === 0 && e.evt.altKey)) {
+      setIsPanning(true)
+      lastPanRef.current = { x: pos.x, y: pos.y }
+      return
+    }
 
     if (activeTool === 'wall') {
       setIsDrawing(true)
       setDrawStart({ x, y })
+    } else if (activeTool === 'room') {
+      if (!roomStart) {
+        setRoomStart({ x, y })
+      } else {
+        const w = Math.abs(x - roomStart.x)
+        const h = Math.abs(y - roomStart.y)
+        if (w > 20 && h > 20) {
+          const x1 = Math.min(roomStart.x, x)
+          const y1 = Math.min(roomStart.y, y)
+          const wallT = 8
+          addWall({ id: uuidv4(), x1, y1, x2: x1 + w, y2: y1, thickness: wallT, color: '#374151', height: 2.7 })
+          addWall({ id: uuidv4(), x1: x1 + w, y1, x2: x1 + w, y2: y1 + h, thickness: wallT, color: '#374151', height: 2.7 })
+          addWall({ id: uuidv4(), x1: x1 + w, y1: y1 + h, x2: x1, y2: y1 + h, thickness: wallT, color: '#374151', height: 2.7 })
+          addWall({ id: uuidv4(), x1, y1: y1 + h, x2: x1, y2: y1, thickness: wallT, color: '#374151', height: 2.7 })
+          addRoom({ id: uuidv4(), name: 'Room', type: 'living', points: [{ x: x1, y: y1 }, { x: x1 + w, y: y1 }, { x: x1 + w, y: y1 + h }, { x: x1, y: y1 + h }], floorColor: '#f3f4f6', wallColor: '#e5e7eb', ceilingHeight: 2.7 })
+        }
+        setRoomStart(null)
+      }
+    } else if (activeTool === 'door' || activeTool === 'window') {
+      const hitWall = walls.find((wall) => {
+        const dx = wall.x2 - wall.x1
+        const dy = wall.y2 - wall.y1
+        const len = Math.sqrt(dx * dx + dy * dy)
+        const nx = -dy / len
+        const ny = dx / len
+        const dist = Math.abs((x - wall.x1) * nx + (y - wall.y1) * ny)
+        const along = ((x - wall.x1) * dx + (y - wall.y1) * dy) / (len * len)
+        return dist < 15 && along >= 0 && along <= 1
+      })
+      if (hitWall) {
+        const posAlong = 0.5
+        if (activeTool === 'door') {
+          addDoor({ id: uuidv4(), wallId: hitWall.id, position: posAlong, width: 0.9, opensInward: true })
+        } else {
+          addWindow({ id: uuidv4(), wallId: hitWall.id, position: posAlong, width: 1.2, sillHeight: 1.0 })
+        }
+      }
     } else if (activeTool === 'select') {
-      // Clicked on empty space
       if (e.target === stage || e.target.attrs?.name === 'grid') {
         setSelected(null)
       }
     }
-  }, [activeTool, zoom, snapToGrid, gridSize])
+  }, [activeTool, zoom, snapToGrid, gridSize, roomStart, walls, addWall, addRoom, addDoor, addWindow, setSelected, stagePos])
 
   const handleMouseMove = useCallback((e: any) => {
-    const pos = e.target.getStage()?.getPointerPosition()
+    const stage = e.target.getStage()
+    const pos = stage?.getPointerPosition()
     if (!pos) return
-    setMousePos({ x: snap(pos.x / zoom), y: snap(pos.y / zoom) })
-  }, [zoom, snapToGrid, gridSize])
 
-  const handleMouseUp = useCallback(() => {
+    if (isPanning) {
+      setStagePos((p) => ({
+        x: p.x + (pos.x - lastPanRef.current.x),
+        y: p.y + (pos.y - lastPanRef.current.y),
+      }))
+      lastPanRef.current = { x: pos.x, y: pos.y }
+      return
+    }
+
+    const x = snap((pos.x - stagePos.x) / zoom)
+    const y = snap((pos.y - stagePos.y) / zoom)
+    setMousePos({ x, y })
+  }, [zoom, snapToGrid, gridSize, isPanning, stagePos])
+
+  const handleMouseUp = useCallback((e: any) => {
+    if (e.evt?.button === 1 || (e.evt?.button === 0 && e.evt?.altKey)) {
+      setIsPanning(false)
+    }
     if (activeTool === 'wall' && isDrawing && drawStart) {
       const dx = mousePos.x - drawStart.x
       const dy = mousePos.y - drawStart.y
@@ -107,15 +173,32 @@ export default function Canvas2D() {
         height={stageSize.height}
         scaleX={zoom}
         scaleY={zoom}
+        x={stagePos.x}
+        y={stagePos.y}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={() => setIsPanning(false)}
         onTouchStart={handleMouseDown}
         onTouchMove={handleMouseMove}
         onTouchEnd={handleMouseUp}
       >
         {/* Grid */}
         <Layer listening={false}>{gridLines}</Layer>
+
+        {/* Room fills */}
+        {rooms.map((room) =>
+          room.points.length >= 3 ? (
+            <Line
+              key={room.id}
+              points={room.points.flatMap((p) => [p.x, p.y])}
+              closed
+              fill={room.floorColor}
+              stroke="transparent"
+              listening={false}
+            />
+          ) : null
+        )}
 
         {/* Walls */}
         <Layer>
@@ -151,6 +234,62 @@ export default function Canvas2D() {
             )
           })}
 
+          {/* Doors */}
+          {doors.map((door) => {
+            const wall = walls.find((w) => w.id === door.wallId)
+            if (!wall) return null
+            const dx = wall.x2 - wall.x1
+            const dy = wall.y2 - wall.y1
+            const px = wall.x1 + dx * door.position
+            const py = wall.y1 + dy * door.position
+            const perp = Math.atan2(-dx, dy)
+            const doorW = door.width * SCALE
+            return (
+              <Group key={door.id}>
+                <Rect
+                  x={px}
+                  y={py}
+                  width={doorW}
+                  height={8}
+                  offsetX={doorW / 2}
+                  offsetY={4}
+                  rotation={(perp * 180) / Math.PI}
+                  fill="#8B4513"
+                  stroke="#5D3A1A"
+                  strokeWidth={1}
+                />
+              </Group>
+            )
+          })}
+
+          {/* Windows */}
+          {windows.map((win) => {
+            const wall = walls.find((w) => w.id === win.wallId)
+            if (!wall) return null
+            const dx = wall.x2 - wall.x1
+            const dy = wall.y2 - wall.y1
+            const px = wall.x1 + dx * win.position
+            const py = wall.y1 + dy * win.position
+            const perp = Math.atan2(-dx, dy)
+            const winW = win.width * SCALE
+            return (
+              <Group key={win.id}>
+                <Rect
+                  x={px}
+                  y={py}
+                  width={winW}
+                  height={6}
+                  offsetX={winW / 2}
+                  offsetY={3}
+                  rotation={(perp * 180) / Math.PI}
+                  fill="#87CEEB"
+                  stroke="#5F9EA0"
+                  strokeWidth={1}
+                />
+              </Group>
+            )
+          })}
+
           {/* Live drawing preview */}
           {isDrawing && drawStart && (
             <>
@@ -165,6 +304,20 @@ export default function Canvas2D() {
               <Circle x={mousePos.x} y={mousePos.y} radius={4} fill="#3b82f6" />
             </>
           )}
+
+          {/* Room preview */}
+          {activeTool === 'room' && roomStart && (
+            <>
+              <Line
+                points={[roomStart.x, roomStart.y, mousePos.x, roomStart.y, mousePos.x, mousePos.y, roomStart.x, mousePos.y, roomStart.x, roomStart.y]}
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dash={[8, 4]}
+                closed
+              />
+              <Circle x={roomStart.x} y={roomStart.y} radius={4} fill="#3b82f6" />
+            </>
+          )}
         </Layer>
 
         {/* Placed Items */}
@@ -172,7 +325,7 @@ export default function Canvas2D() {
           {placedItems.map((item) => {
             const isSelected = selectedId === item.id
             const pixelW = item.width * SCALE
-            const pixelH = item.height * SCALE
+            const pixelH = (item.depth ?? item.height) * SCALE
             return (
               <Group
                 key={item.id}
@@ -224,6 +377,11 @@ export default function Canvas2D() {
           })}
         </Layer>
       </Stage>
+
+      {/* Pan hint */}
+      <div className="absolute bottom-2 left-2 text-[10px] text-muted-foreground pointer-events-none">
+        Alt + drag to pan · Room: click two corners
+      </div>
 
       {/* Measurement tooltip */}
       {wallLength && (

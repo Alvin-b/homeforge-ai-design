@@ -56,14 +56,20 @@ function FurnitureItem3D({ item }: { item: any }) {
   const x = item.x / SCALE
   const z = item.y / SCALE
   const w = item.width
-  const h = item.height * 0.6
-  const d = item.height || 0.5
+  const d = item.depth ?? item.height ?? 0.5
+  const h = (item.height ?? 0.8)
+  const rot = -(item.rotation * Math.PI) / 180
+  const cat = (item.furnitureId || '').split('-')[0]
+
+  const color = item.color || (cat === 'sofa' ? '#8b7355' : cat === 'bed' ? '#c9a86c' : cat === 'table' ? '#5c4033' : cat === 'chair' ? '#6b5344' : '#93a3c0')
 
   return (
-    <mesh position={[x, h / 2, z]} rotation={[0, -(item.rotation * Math.PI) / 180, 0]} castShadow>
-      <boxGeometry args={[w, h, d]} />
-      <meshStandardMaterial color="#93a3c0" roughness={0.6} />
-    </mesh>
+    <group position={[x, h / 2, z]} rotation={[0, rot, 0]}>
+      <mesh castShadow>
+        <boxGeometry args={[w * 0.98, h * 0.98, d * 0.98]} />
+        <meshStandardMaterial color={color} roughness={0.6} />
+      </mesh>
+    </group>
   )
 }
 
@@ -87,8 +93,26 @@ function CompassIndicator() {
   )
 }
 
-function Scene() {
-  const { walls, placedItems } = useEditorStore()
+function RoomFloor3D({ room }: { room: any }) {
+  if (room.points.length < 3) return null
+  const points = room.points.map((p: { x: number; y: number }) => [p.x / SCALE, 0, p.y / SCALE] as [number, number, number])
+  const shape = new THREE.Shape()
+  shape.moveTo(points[0][0], points[0][2])
+  for (let i = 1; i < points.length; i++) {
+    shape.lineTo(points[i][0], points[i][2])
+  }
+  shape.closePath()
+  const geom = new THREE.ShapeGeometry(shape)
+  return (
+    <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <primitive object={geom} attach="geometry" />
+      <meshStandardMaterial color={room.floorColor || '#f3f4f6'} roughness={0.9} />
+    </mesh>
+  )
+}
+
+function Scene({ walkthrough = false }: { walkthrough?: boolean }) {
+  const { walls, placedItems, rooms } = useEditorStore()
 
   return (
     <>
@@ -120,6 +144,9 @@ function Scene() {
       <hemisphereLight args={['#b1c4e0', '#e8dcc8', 0.4]} />
 
       <Ground />
+      {rooms.map((room) => (
+        <RoomFloor3D key={room.id} room={room} />
+      ))}
       <CompassIndicator />
 
       <Grid
