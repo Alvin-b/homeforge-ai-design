@@ -502,8 +502,8 @@ function Bath3D({ w, h, d, furnitureId }: { w: number; h: number; d: number; fur
         <cylinderGeometry args={[0.02, 0.02, h * 0.2, 8]} />
         {M(materials.chrome)}
       </mesh>
-      <mesh position={[0, h, -d * 0.35]} castShadow>
-        <cylinderGeometry args={[0.015, 0.015, 0.12, 8]} rotation={[Math.PI / 2, 0, 0]} />
+      <mesh position={[0, h, -d * 0.35]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.015, 0.015, 0.12, 8]} />
         {M(materials.chrome)}
       </mesh>
     </group>
