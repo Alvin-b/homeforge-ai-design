@@ -1,9 +1,10 @@
-import React, { Component, type ReactNode } from 'react'
+import React, { Component, Suspense, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useEditorStore } from '@/store/useEditorStore'
 import { AlertTriangle, ExternalLink, Compass } from 'lucide-react'
+import FurnitureItem3D from '@/components/editor/FurnitureModel3D'
 
 class WebGLErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
