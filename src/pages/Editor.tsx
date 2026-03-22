@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   MousePointer2, Minus, Square, DoorOpen,
-  Grid3x3, Ruler, Trash2,
+  Grid3x3, Ruler, Trash2, Layers,
   ZoomIn, ZoomOut, Box, Camera, Footprints,
-  Save, Share2, ChevronLeft, Grip, Check, Wand2, Sparkles
+  Save, Share2, ChevronLeft, Grip, Check, Wand2, Sparkles,
+  ImagePlus, ShoppingCart
 } from 'lucide-react'
 import Canvas2D from '@/components/editor/Canvas2D'
 import Canvas3D from '@/components/editor/Canvas3D'
@@ -13,6 +14,9 @@ import FurnitureLibrary from '@/components/editor/FurnitureLibrary'
 import PropertiesPanel from '@/components/editor/PropertiesPanel'
 import SmartWizard from '@/components/editor/SmartWizard'
 import AIDesignGenerator from '@/components/editor/AIDesignGenerator'
+import TemplatePicker from '@/components/editor/TemplatePicker'
+import MoodBoard from '@/components/editor/MoodBoard'
+import ShoppingList from '@/components/editor/ShoppingList'
 import { useEditorStore, type Tool } from '@/store/useEditorStore'
 import { Link, useParams } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
@@ -25,6 +29,7 @@ const TOOLS: { id: Tool; icon: any; label: string; shortcut: string }[] = [
   { id: 'room', icon: Square, label: 'Draw Room', shortcut: 'R' },
   { id: 'door', icon: DoorOpen, label: 'Add Door', shortcut: 'D' },
   { id: 'window', icon: Grid3x3, label: 'Add Window', shortcut: 'N' },
+  { id: 'stairs', icon: Layers, label: 'Add Stairs', shortcut: 'S' },
   { id: 'measure', icon: Ruler, label: 'Measure', shortcut: 'M' },
   { id: 'delete', icon: Trash2, label: 'Delete', shortcut: 'Del' },
 ]
@@ -57,12 +62,16 @@ export default function Editor() {
   const {
     activeTool, setTool, viewMode, setViewMode,
     zoom, setZoom, projectName, setProjectName,
-    deleteSelected, hydrate, exportSnapshot
+    deleteSelected, hydrate, exportSnapshot,
+    walls, rooms
   } = useEditorStore()
   const [showFurniture, setShowFurniture] = useState(true)
   const [saved, setSaved] = useState(false)
   const [smartWizardOpen, setSmartWizardOpen] = useState(false)
   const [aiDesignOpen, setAIDesignOpen] = useState(false)
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [showMoodBoard, setShowMoodBoard] = useState(false)
+  const [showShoppingList, setShowShoppingList] = useState(false)
 
   useEffect(() => {
     const data = loadProject(projectKey)
@@ -99,7 +108,7 @@ export default function Editor() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return
-      const map: Record<string, Tool> = { v: 'select', w: 'wall', r: 'room', d: 'door', n: 'window', m: 'measure' }
+      const map: Record<string, Tool> = { v: 'select', w: 'wall', r: 'room', d: 'door', n: 'window', s: 'stairs', m: 'measure' }
       if (map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()])
       if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected()
       if (e.key === 'Escape') setTool('select')
@@ -113,7 +122,7 @@ export default function Editor() {
       {/* Top Bar */}
       <div className="h-12 bg-card border-b border-border flex items-center justify-between px-3 z-10 shadow-toolbar">
         <div className="flex items-center gap-2">
-          <Link to="/" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <Link to="/projects" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-3.5 h-3.5" />
             <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
               <Box className="w-3 h-3 text-primary-foreground" />
@@ -132,6 +141,7 @@ export default function Editor() {
           {([
             { id: '2d' as const, icon: Grid3x3, label: '2D' },
             { id: '3d' as const, icon: Box, label: '3D' },
+            { id: 'walkthrough' as const, icon: Footprints, label: '360°' },
             { id: 'render' as const, icon: Camera, label: 'Render' },
           ]).map((view) => (
             <button
@@ -209,6 +219,12 @@ export default function Editor() {
 
         {/* Furniture Library - show in 2D and 3D */}
         {showFurniture && (viewMode === '2d' || viewMode === '3d') && <FurnitureLibrary />}
+        {showMoodBoard && (
+          <div className="w-64 h-full bg-card border-r border-border">
+            <MoodBoard onClose={() => setShowMoodBoard(false)} />
+          </div>
+        )}
+        {showShoppingList && <ShoppingList onClose={() => setShowShoppingList(false)} />}
 
         {/* Main Canvas */}
         <div className="flex-1 relative overflow-hidden">
@@ -245,6 +261,30 @@ export default function Editor() {
 
       <SmartWizard open={smartWizardOpen} onOpenChange={setSmartWizardOpen} />
       <AIDesignGenerator open={aiDesignOpen} onOpenChange={setAIDesignOpen} />
+      {templatePickerOpen && (
+        <div className="fixed inset-0 z-50 bg-background/95 flex items-center justify-center p-6">
+          <div className="max-w-2xl w-full">
+            <h2 className="text-xl font-display font-bold mb-4">Choose a template</h2>
+            <TemplatePicker onSelect={() => setTemplatePickerOpen(false)} />
+            <button
+              onClick={() => setTemplatePickerOpen(false)}
+              className="mt-4 text-sm text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {walls.length === 0 && rooms.length === 0 && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2">
+          <button
+            onClick={() => setTemplatePickerOpen(true)}
+            className="text-xs text-muted-foreground hover:text-highlight"
+          >
+            Start from template
+          </button>
+        </div>
+      )}
     </div>
   )
 }

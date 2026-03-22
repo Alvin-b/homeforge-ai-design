@@ -14,17 +14,16 @@ export default function Canvas2D() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [roomStart, setRoomStart] = useState<{ x: number; y: number } | null>(null)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
-
-  useEffect(() => {
-    if (activeTool !== 'room') setRoomStart(null)
-  }, [activeTool])
+  const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null)
+  const [measureEnd, setMeasureEnd] = useState<{ x: number; y: number } | null>(null)
   const [isPanning, setIsPanning] = useState(false)
   const lastPanRef = useRef({ x: 0, y: 0 })
 
   const {
-    activeTool, walls, placedItems, selectedId, doors, windows, rooms,
+    activeTool, walls, placedItems, selectedId, doors, windows, rooms, stairs,
     snapToGrid, gridSize, zoom,
-    addWall, addRoom, addDoor, addWindow, setSelected, updateItem,
+    addWall, addRoom, addDoor, addWindow, addStair, updateStair,
+    setSelected, updateItem,
   } = useEditorStore()
 
   useEffect(() => {
@@ -77,6 +76,12 @@ export default function Canvas2D() {
         }
         setRoomStart(null)
       }
+    } else if (activeTool === 'measure') {
+      if (!measureStart) setMeasureStart({ x, y })
+      else if (!measureEnd) setMeasureEnd({ x, y })
+      else { setMeasureStart({ x, y }); setMeasureEnd(null) }
+    } else if (activeTool === 'stairs') {
+      addStair({ id: uuidv4(), x, y, width: 1.2, depth: 2.5, direction: 0 })
     } else if (activeTool === 'door' || activeTool === 'window') {
       const hitWall = walls.find((wall) => {
         const dx = wall.x2 - wall.x1
@@ -101,7 +106,7 @@ export default function Canvas2D() {
         setSelected(null)
       }
     }
-  }, [activeTool, zoom, snapToGrid, gridSize, roomStart, walls, addWall, addRoom, addDoor, addWindow, setSelected, stagePos])
+  }, [activeTool, zoom, snapToGrid, gridSize, roomStart, measureStart, measureEnd, walls, addWall, addRoom, addDoor, addWindow, addStair, setSelected, stagePos])
 
   const handleMouseMove = useCallback((e: any) => {
     const stage = e.target.getStage()
@@ -121,6 +126,11 @@ export default function Canvas2D() {
     const y = snap((pos.y - stagePos.y) / zoom)
     setMousePos({ x, y })
   }, [zoom, snapToGrid, gridSize, isPanning, stagePos])
+
+  useEffect(() => {
+    if (activeTool !== 'room') setRoomStart(null)
+    if (activeTool !== 'measure') { setMeasureStart(null); setMeasureEnd(null) }
+  }, [activeTool])
 
   const handleMouseUp = useCallback((e: any) => {
     if (e.evt?.button === 1 || (e.evt?.button === 0 && e.evt?.altKey)) {
@@ -193,9 +203,12 @@ export default function Canvas2D() {
               key={room.id}
               points={room.points.flatMap((p) => [p.x, p.y])}
               closed
-              fill={room.floorColor}
-              stroke="transparent"
-              listening={false}
+              fill={selectedId === room.id ? room.floorColor : room.floorColor}
+              stroke={selectedId === room.id ? '#3b82f6' : 'transparent'}
+              strokeWidth={selectedId === room.id ? 2 : 0}
+              listening
+              onClick={() => setSelected(room.id)}
+              onTap={() => setSelected(room.id)}
             />
           ) : null
         )}
@@ -262,6 +275,40 @@ export default function Canvas2D() {
             )
           })}
 
+          {/* Stairs */}
+          {stairs.map((stair) => {
+            const isSelected = selectedId === stair.id
+            const pixelW = stair.width * SCALE
+            const pixelH = stair.depth * SCALE
+            return (
+              <Group
+                key={stair.id}
+                x={stair.x}
+                y={stair.y}
+                rotation={stair.direction}
+                draggable={activeTool === 'select'}
+                onClick={() => setSelected(stair.id)}
+                onTap={() => setSelected(stair.id)}
+                onDragEnd={(e) => {
+                  const pos = e.target.position()
+                  updateStair(stair.id, { x: snap(pos.x), y: snap(pos.y) })
+                }}
+              >
+                <Rect
+                  width={pixelW}
+                  height={pixelH}
+                  offsetX={pixelW / 2}
+                  offsetY={pixelH / 2}
+                  fill={isSelected ? '#a78bfa' : '#8b5cf6'}
+                  stroke={isSelected ? '#7c3aed' : '#6d28d9'}
+                  strokeWidth={isSelected ? 2 : 1}
+                  cornerRadius={2}
+                />
+                <Text text="↗" fontSize={14} fill="white" width={pixelW} align="center" offsetX={pixelW / 2} y={-pixelH / 4} />
+              </Group>
+            )
+          })}
+
           {/* Windows */}
           {windows.map((win) => {
             const wall = walls.find((w) => w.id === win.wallId)
@@ -302,6 +349,20 @@ export default function Canvas2D() {
               />
               <Circle x={drawStart.x} y={drawStart.y} radius={4} fill="#3b82f6" />
               <Circle x={mousePos.x} y={mousePos.y} radius={4} fill="#3b82f6" />
+            </>
+          )}
+
+          {/* Measure tool */}
+          {activeTool === 'measure' && measureStart && (
+            <>
+              <Line
+                points={measureEnd ? [measureStart.x, measureStart.y, measureEnd.x, measureEnd.y] : [measureStart.x, measureStart.y, mousePos.x, mousePos.y]}
+                stroke="#10b981"
+                strokeWidth={2}
+                dash={[6, 4]}
+              />
+              <Circle x={measureStart.x} y={measureStart.y} radius={5} fill="#10b981" />
+              {measureEnd && <Circle x={measureEnd.x} y={measureEnd.y} radius={5} fill="#10b981" />}
             </>
           )}
 
@@ -380,8 +441,15 @@ export default function Canvas2D() {
 
       {/* Pan hint */}
       <div className="absolute bottom-2 left-2 text-[10px] text-muted-foreground pointer-events-none">
-        Alt + drag to pan · Room: click two corners
+        Alt + drag to pan · Room: click two corners · Measure: click two points
       </div>
+
+      {/* Measure distance label */}
+      {activeTool === 'measure' && measureStart && measureEnd && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-mono px-3 py-1.5 rounded-lg shadow-lg">
+          {((Math.sqrt(Math.pow(measureEnd.x - measureStart.x, 2) + Math.pow(measureEnd.y - measureStart.y, 2)) / SCALE)).toFixed(2)} m
+        </div>
+      )}
 
       {/* Measurement tooltip */}
       {wallLength && (

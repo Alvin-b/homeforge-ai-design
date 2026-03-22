@@ -89,8 +89,8 @@ export default function Landing() {
             <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Reviews</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/editor" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
-              Log in
+            <Link to="/projects" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
+              My Projects
             </Link>
             <Link
               to="/editor"
