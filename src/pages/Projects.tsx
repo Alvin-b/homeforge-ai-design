@@ -1,7 +1,6 @@
-import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import React, { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { Plus, FolderOpen, Trash2, Box } from 'lucide-react'
-import { v4 as uuidv4 } from 'uuid'
 import { motion } from 'framer-motion'
 
 const STORAGE_KEY = 'homeforge-projects'
@@ -33,10 +32,7 @@ function deleteProject(id: string) {
 }
 
 export default function Projects() {
-  const navigate = useNavigate()
   const [projects, setProjects] = React.useState(getAllProjects())
-
-  const handleNewProject = () => navigate(`/editor/${uuidv4()}`)
 
   React.useEffect(() => {
     const interval = setInterval(() => setProjects(getAllProjects()), 1000)
@@ -76,13 +72,13 @@ export default function Projects() {
           <h1 className="text-2xl font-display font-bold text-foreground">
             My Projects
           </h1>
-          <button
-            onClick={handleNewProject}
+          <Link
+            to="/editor"
             className="inline-flex items-center gap-2 bg-highlight text-highlight-foreground px-5 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90"
           >
             <Plus className="w-4 h-4" />
             New Project
-          </button>
+          </Link>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -125,13 +121,13 @@ export default function Projects() {
           <div className="text-center py-16 border border-dashed border-border rounded-xl">
             <FolderOpen className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">No projects yet</p>
-            <button
-              onClick={handleNewProject}
+            <Link
+              to="/editor"
               className="inline-flex items-center gap-2 mt-4 text-highlight font-medium hover:underline"
             >
               <Plus className="w-4 h-4" />
               Create your first project
-            </button>
+            </Link>
           </div>
         )}
       </main>

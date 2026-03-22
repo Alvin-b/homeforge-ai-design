@@ -9,15 +9,13 @@ export default function FurnitureLibrary() {
   const [activeCategory, setActiveCategory] = useState('all')
   const { placeItem } = useEditorStore()
 
-const { theme } = useEditorStore()
   const filtered = useMemo(() => {
     return FURNITURE_ITEMS.filter(item => {
       const matchSearch = item.name.toLowerCase().includes(search.toLowerCase())
       const matchCat = activeCategory === 'all' || item.category === activeCategory
-      const matchStyle = theme.furnitureStyle === 'all' || item.styles.includes(theme.furnitureStyle)
-      return matchSearch && matchCat && matchStyle
+      return matchSearch && matchCat
     })
-  }, [search, activeCategory, theme.furnitureStyle])
+  }, [search, activeCategory])
 
   const handleAddItem = (item: typeof FURNITURE_ITEMS[0]) => {
     placeItem({

@@ -59,19 +59,8 @@ function RoomFloor3D({ room }: { room: any }) {
   )
 }
 
-function Stair3D({ stair }: { stair: any }) {
-  const x = stair.x / SCALE
-  const z = stair.y / SCALE
-  return (
-    <mesh position={[x, 0.5, z]} rotation={[0, -(stair.direction * Math.PI) / 180, 0]} castShadow>
-      <boxGeometry args={[stair.width, 0.3, stair.depth]} />
-      <meshStandardMaterial color="#8b5cf6" roughness={0.6} />
-    </mesh>
-  )
-}
-
 function RenderScene() {
-  const { walls, placedItems, rooms, stairs } = useEditorStore()
+  const { walls, placedItems, rooms } = useEditorStore()
   return (
     <>
       <PerspectiveCamera makeDefault position={[8, 6, 8]} fov={45} />
@@ -86,7 +75,6 @@ function RenderScene() {
       {rooms.map((r) => <RoomFloor3D key={r.id} room={r} />)}
       {walls.map((w) => <Wall3D key={w.id} wall={w} />)}
       {placedItems.map((i) => <FurnitureItem3D key={i.id} item={i} />)}
-      {stairs.map((s) => <Stair3D key={s.id} stair={s} />)}
       <Environment preset="apartment" />
     </>
   )

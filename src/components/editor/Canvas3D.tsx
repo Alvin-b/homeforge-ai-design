@@ -1,4 +1,4 @@
-import React, { Component, Suspense, type ReactNode } from 'react'
+import React, { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -6,34 +6,49 @@ import { useEditorStore } from '@/store/useEditorStore'
 import { AlertTriangle, ExternalLink, Compass } from 'lucide-react'
 import FurnitureItem3D from '@/components/editor/FurnitureModel3D'
 
-class WebGLErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+type WebGLErrorBoundaryProps = {
+  children: ReactNode
+  onError: () => void
+}
+
+class WebGLErrorBoundary extends Component<WebGLErrorBoundaryProps, { hasError: boolean }> {
   state = { hasError: false }
   static getDerivedStateFromError() { return { hasError: true } }
+  componentDidCatch() {
+    this.props.onError()
+  }
   render() {
-    if (this.state.hasError) return <WebGLFallback />
+    if (this.state.hasError) return null
     return this.props.children
   }
 }
 
-function WebGLFallback() {
+function WebGLFallback({ liteModeAttempted = false }: { liteModeAttempted?: boolean }) {
   return (
     <div className="w-full h-full flex items-center justify-center bg-muted">
       <div className="text-center max-w-sm px-6">
         <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
         <p className="text-sm font-display font-semibold text-foreground">3D View Unavailable</p>
         <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          WebGL isn't available in this sandboxed preview. Click <strong>"Open in new tab"</strong> (top-right of the preview) to test the full 3D view in your browser.
+          {liteModeAttempted
+            ? 'WebGL failed even in low-power mode in this sandboxed preview.'
+            : "WebGL isn't available in this sandboxed preview."}{' '}
+          Click <strong>"Open in new tab"</strong> (top-right of the preview) to test the full 3D view in your browser.
         </p>
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-accent">
+        <button
+          onClick={() => window.open(window.location.href, '_blank', 'noopener,noreferrer')}
+          className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs text-accent hover:opacity-90 transition-opacity"
+        >
           <ExternalLink className="w-3.5 h-3.5" />
           <span className="font-medium">Open in new tab to use 3D</span>
-        </div>
+        </button>
       </div>
     </div>
   )
 }
 
 const SCALE = 50
+type RenderQuality = 'full' | 'lite' | 'unsupported'
 
 function Wall3D({ wall }: { wall: any }) {
   const dx = wall.x2 - wall.x1
@@ -93,19 +108,9 @@ function RoomFloor3D({ room }: { room: any }) {
   )
 }
 
-function Stair3D({ stair }: { stair: any }) {
-  const x = stair.x / SCALE
-  const z = stair.y / SCALE
-  return (
-    <mesh position={[x, 0.5, z]} rotation={[0, -(stair.direction * Math.PI) / 180, 0]} castShadow>
-      <boxGeometry args={[stair.width, 0.3, stair.depth]} />
-      <meshStandardMaterial color="#8b5cf6" roughness={0.6} />
-    </mesh>
-  )
-}
-
-function Scene() {
-  const { walls, placedItems, rooms, stairs } = useEditorStore()
+function Scene({ quality = 'full' }: { quality?: RenderQuality }) {
+  const { walls, placedItems, rooms } = useEditorStore()
+  const isLite = quality === 'lite'
 
   return (
     <>
@@ -125,7 +130,7 @@ function Scene() {
       <directionalLight
         position={[10, 15, 10]}
         intensity={1.2}
-        castShadow
+        castShadow={!isLite}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-camera-far={50}
@@ -142,18 +147,20 @@ function Scene() {
       ))}
       <CompassIndicator />
 
-      <Grid
-        position={[0, 0, 0]}
-        args={[100, 100]}
-        cellSize={1}
-        cellThickness={0.5}
-        cellColor="#d4d4d8"
-        sectionSize={5}
-        sectionThickness={1}
-        sectionColor="#a1a1aa"
-        fadeDistance={50}
-        infiniteGrid
-      />
+      {!isLite && (
+        <Grid
+          position={[0, 0, 0]}
+          args={[100, 100]}
+          cellSize={1}
+          cellThickness={0.5}
+          cellColor="#d4d4d8"
+          sectionSize={5}
+          sectionThickness={1}
+          sectionColor="#a1a1aa"
+          fadeDistance={50}
+          infiniteGrid
+        />
+      )}
 
       {walls.map((wall) => (
         <Wall3D key={wall.id} wall={wall} />
@@ -162,9 +169,8 @@ function Scene() {
       {placedItems.map((item) => (
         <FurnitureItem3D key={item.id} item={item} />
       ))}
-      {stairs.map((s) => <Stair3D key={s.id} stair={s} />)}
 
-      <Environment preset="apartment" />
+      {!isLite && <Environment preset="apartment" />}
     </>
   )
 }
@@ -181,24 +187,67 @@ function CanvasLoading() {
 }
 
 export default function Canvas3DView() {
+  const [quality, setQuality] = useState<RenderQuality>('full')
+  const [retrySeed, setRetrySeed] = useState(0)
+
+  const supportsWebGL = useMemo(() => {
+    if (typeof document === 'undefined') return true
+    const probe = document.createElement('canvas')
+    return Boolean(
+      probe.getContext('webgl2') ||
+      probe.getContext('webgl') ||
+      probe.getContext('experimental-webgl')
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!supportsWebGL) setQuality('unsupported')
+  }, [supportsWebGL])
+
+  const handleWebGLError = () => {
+    setRetrySeed((prev) => prev + 1)
+    setQuality((prev) => (prev === 'full' ? 'lite' : 'unsupported'))
+  }
+
+  if (quality === 'unsupported') {
+    return <WebGLFallback liteModeAttempted />
+  }
+
+  const isLite = quality === 'lite'
+
   return (
-    <WebGLErrorBoundary>
-      <div className="w-full h-full bg-muted relative">
+    <div className="w-full h-full bg-muted relative">
+      <WebGLErrorBoundary key={`webgl-${quality}-${retrySeed}`} onError={handleWebGLError}>
         <Canvas
-          shadows
+          shadows={!isLite}
+          dpr={isLite ? [1, 1.25] : [1, 2]}
           fallback={<CanvasLoading />}
-          gl={{ failIfMajorPerformanceCaveat: false, antialias: true, alpha: false }}
+          gl={{
+            failIfMajorPerformanceCaveat: false,
+            antialias: !isLite,
+            alpha: false,
+            stencil: false,
+            depth: true,
+            powerPreference: isLite ? 'low-power' : 'high-performance',
+          }}
           onCreated={({ gl }) => {
             gl.setClearColor(new THREE.Color('#f8f9ff'), 1)
           }}
         >
-          <Scene />
+          <Scene quality={quality} />
         </Canvas>
-        <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">
-          <Compass className="w-3 h-3" />
-          <span>Orbit: drag · Zoom: scroll · Pan: right-drag</span>
+      </WebGLErrorBoundary>
+
+      {isLite && (
+        <div className="absolute top-3 left-3 rounded-md border border-border bg-card/80 px-2 py-1 text-[10px] text-muted-foreground backdrop-blur-sm">
+          Low-power 3D mode enabled
         </div>
+      )}
+
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">
+        <Compass className="w-3 h-3" />
+        <span>Orbit: drag · Zoom: scroll · Pan: right-drag</span>
       </div>
-    </WebGLErrorBoundary>
+    </div>
   )
 }
