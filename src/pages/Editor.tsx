@@ -13,7 +13,7 @@ import FurnitureLibrary from '@/components/editor/FurnitureLibrary'
 import PropertiesPanel from '@/components/editor/PropertiesPanel'
 import SmartWizard from '@/components/editor/SmartWizard'
 import AIDesignGenerator from '@/components/editor/AIDesignGenerator'
-import { useEditorStore, type Tool } from '@/store/useEditorStore'
+import { useEditorStore, type Tool, type EditorSnapshot } from '@/store/useEditorStore'
 import { Link, useParams } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 
@@ -29,7 +29,7 @@ const TOOLS: { id: Tool; icon: any; label: string; shortcut: string }[] = [
   { id: 'delete', icon: Trash2, label: 'Delete', shortcut: 'Del' },
 ]
 
-function loadProject(id: string): Record<string, unknown> | null {
+function loadProject(id: string): EditorSnapshot | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     const all = raw ? JSON.parse(raw) : {}
@@ -39,7 +39,7 @@ function loadProject(id: string): Record<string, unknown> | null {
   }
 }
 
-function saveProject(id: string, data: Record<string, unknown>) {
+function saveProject(id: string, data: EditorSnapshot) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     const all = raw ? JSON.parse(raw) : {}
