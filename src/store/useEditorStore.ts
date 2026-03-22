@@ -57,12 +57,22 @@ export interface Window {
   sillHeight: number
 }
 
+export interface Stair {
+  id: string
+  x: number
+  y: number
+  width: number
+  depth: number
+  direction: number
+}
+
 interface EditorState {
   activeTool: Tool
   walls: Wall[]
   rooms: Room[]
   doors: Door[]
   windows: Window[]
+  stairs: Stair[]
   placedItems: PlacedItem[]
   selectedId: string | null
   viewMode: ViewMode
@@ -78,10 +88,13 @@ interface EditorState {
   updateWall: (id: string, updates: Partial<Wall>) => void
   deleteWall: (id: string) => void
   addRoom: (room: Room) => void
+  updateRoom: (id: string, updates: Partial<Room>) => void
   addDoor: (door: Door) => void
   deleteDoor: (id: string) => void
   addWindow: (win: Window) => void
   deleteWindow: (id: string) => void
+  addStair: (stair: Stair) => void
+  deleteStair: (id: string) => void
   placeItem: (item: PlacedItem) => void
   updateItem: (id: string, updates: Partial<PlacedItem>) => void
   deleteItem: (id: string) => void
@@ -102,6 +115,7 @@ export interface EditorSnapshot {
   rooms: Room[]
   doors: Door[]
   windows: Window[]
+  stairs: Stair[]
   placedItems: PlacedItem[]
   projectName: string
 }
@@ -112,6 +126,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   rooms: [],
   doors: [],
   windows: [],
+  stairs: [],
   placedItems: [],
   selectedId: null,
   viewMode: '2d',
@@ -136,6 +151,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   })),
 
   addRoom: (room) => set((s) => ({ rooms: [...s.rooms, room] })),
+  updateRoom: (id, updates) => set((s) => ({
+    rooms: s.rooms.map(r => r.id === id ? { ...r, ...updates } : r)
+  })),
 
   addDoor: (door) => set((s) => ({ doors: [...s.doors, door] })),
   deleteDoor: (id) => set((s) => ({
@@ -146,6 +164,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addWindow: (win) => set((s) => ({ windows: [...s.windows, win] })),
   deleteWindow: (id) => set((s) => ({
     windows: s.windows.filter(w => w.id !== id),
+    selectedId: s.selectedId === id ? null : s.selectedId,
+  })),
+  addStair: (stair) => set((s) => ({ stairs: [...s.stairs, stair] })),
+  deleteStair: (id) => set((s) => ({
+    stairs: s.stairs.filter(st => st.id !== id),
     selectedId: s.selectedId === id ? null : s.selectedId,
   })),
 
@@ -165,9 +188,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (!selectedId) return
     set((s) => ({
       walls: s.walls.filter(w => w.id !== selectedId),
+      rooms: s.rooms.filter(r => r.id !== selectedId),
       placedItems: s.placedItems.filter(i => i.id !== selectedId),
       doors: s.doors.filter(d => d.id !== selectedId),
       windows: s.windows.filter(w => w.id !== selectedId),
+      stairs: s.stairs.filter(st => st.id !== selectedId),
       selectedId: null,
     }))
   },
@@ -184,6 +209,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     rooms: data.rooms ?? [],
     doors: data.doors ?? [],
     windows: data.windows ?? [],
+    stairs: data.stairs ?? [],
     placedItems: data.placedItems ?? [],
     projectName: data.projectName ?? 'Untitled Project',
   }),
@@ -195,6 +221,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       rooms: s.rooms,
       doors: s.doors,
       windows: s.windows,
+      stairs: s.stairs,
       placedItems: s.placedItems,
       projectName: s.projectName,
     }
