@@ -15,9 +15,7 @@ export default function Canvas2D() {
   const [roomStart, setRoomStart] = useState<{ x: number; y: number } | null>(null)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
 
-  useEffect(() => {
-    if (activeTool !== 'room') setRoomStart(null)
-  }, [activeTool])
+  
   const [isPanning, setIsPanning] = useState(false)
   const lastPanRef = useRef({ x: 0, y: 0 })
 

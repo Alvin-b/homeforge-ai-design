@@ -29,7 +29,7 @@ const TOOLS: { id: Tool; icon: any; label: string; shortcut: string }[] = [
   { id: 'delete', icon: Trash2, label: 'Delete', shortcut: 'Del' },
 ]
 
-function loadProject(id: string): Record<string, unknown> | null {
+function loadProject(id: string): EditorSnapshot | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     const all = raw ? JSON.parse(raw) : {}
@@ -39,7 +39,7 @@ function loadProject(id: string): Record<string, unknown> | null {
   }
 }
 
-function saveProject(id: string, data: Record<string, unknown>) {
+function saveProject(id: string, data: EditorSnapshot) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     const all = raw ? JSON.parse(raw) : {}
